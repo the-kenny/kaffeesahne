@@ -8,7 +8,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
-use std::mem;
 
 #[derive(Copy, Clone)]
 struct Vertex {
@@ -43,15 +42,15 @@ impl Transform {
 
   fn as_matrix(&self) -> Matrix4<f32> {
     let mut model: Matrix4<f32> = nalgebra::one();
-    model *= Matrix4::new(self.scale.x, 0.0, 0.0, 0.0,
-                          0.0, self.scale.y, 0.0, 0.0,
-                          0.0, 0.0, self.scale.z, 0.0,
-                          0.0, 0.0, 0.0,               1.0).transpose();
-    model *= nalgebra::to_homogeneous(self.rot.to_rotation_matrix().submatrix()).transpose();
+    model *= Matrix4::new(self.scale.x, 0.0,          0.0,          0.0,
+                          0.0,          self.scale.y, 0.0,          0.0,
+                          0.0,          0.0,          self.scale.z, 0.0,
+                          0.0,          0.0,          0.0,          1.0);
+    model *= nalgebra::to_homogeneous(self.rot.to_rotation_matrix().submatrix());
     model *= Matrix4::new(1.0, 0.0, 0.0, self.pos.x,
                           0.0, 1.0, 0.0, self.pos.y,
                           0.0, 0.0, 1.0, self.pos.z,
-                          0.0, 0.0, 0.0, 1.0).transpose();
+                          0.0, 0.0, 0.0, 1.0);
     model
   }
 }
@@ -97,8 +96,8 @@ const vec3 lightColor = vec3(1.0, 1.0, 1.0);
 const vec4 surfaceColor = vec4(1.0, 0.0, 0.0, 1.0);
 
 void main() {
-  vec3 normal = normalize(normalMatrix * fragNormal);
-  vec3 fragPosition = vec3(modelMatrix * vec4(fragVert, 0.0));
+  vec3 normal         = normalize(normalMatrix * fragNormal);
+  vec3 fragPosition   = vec3(modelMatrix * vec4(fragVert, 0.0));
   vec3 surfaceToLight = lightPosition - fragPosition;
 
   float brightness = dot(normal, surfaceToLight) / (length(surfaceToLight) * length(normal));
@@ -142,7 +141,7 @@ fn main() {
       for n in 0..3 {
         let p = face[n];
         vertices.push(Vertex {
-          position: [p.x, p.y, p.z],
+          position: [p.x*0.5, p.y*0.5, p.z*0.5],
           normal: [normal.x, normal.y, normal.z],
           texture: [0.0; 2],
         });
@@ -155,35 +154,11 @@ fn main() {
     .with_depth_buffer(24)
     .build_glium().unwrap();
 
-  let mut transform = Transform {
-    pos: Vector3::new(0.0, -0.5, 0.0),
-    rot: UnitQuaternion::from_axisangle(nalgebra::Unit::new(&Vector3::new(0.0, 1.0, 0.0)),
-                                        0.0),
-    scale: Vector3::new(0.5, 0.5, 0.5),
-  };
-
-  let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
-  // let normals   = glium::VertexBuffer::new(&display, &indices).unwrap();
-  // let indices   = glium::index::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList, &indices).unwrap();
-  let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
-  
-  let program = glium::Program::from_source(&display,
-                                            &VERTEX_SHADER_SRC,
-                                            &FRAGMENT_SHADER_SRC,
-                                            None).unwrap();
-
-  let params = glium::DrawParameters {
-    depth: glium::Depth {
-      test: glium::draw_parameters::DepthTest::IfLess,
-      write: true,
-      .. Default::default()
-    },
-    .. Default::default()
-  };
-  
+ 
   let mut t: f32 = 0.0;
   let mut x: f32 = 0.0;
   let mut y: f32 = 0.0;
+  let mut draw_teapot = true;
   
   loop {
     let mut target     = display.draw();
@@ -193,130 +168,210 @@ fn main() {
 
     t += 1.0;
 
-    // transform.rot = UnitQuaternion::from_axisangle(nalgebra::Unit::new(&Vector3::new(0.0, 1.0, 0.0)),
-    //                                                (x*2.0 / width as f32) * 3.141);
-    // transform.pos.x = x*5.0 / width as f32;
-    // transform.pos.z = y*-5.0 / width as f32;
-    // let scale = t/500.0;
-    // transform.scale = Vector3::new(scale, scale, scale);
-    
+    let params = glium::DrawParameters {
+      depth: glium::Depth {
+        test: glium::draw_parameters::DepthTest::IfLess,
+        write: true,
+        .. Default::default()
+      },
+      .. Default::default()
+    };
+
+
+    // Camera
+    // let cam_radius = (x / width as f32) * 3.0;
+    // println!("cam_radius: {}", cam_radius);
+    let cam_radius = 3.0;
+    let cam = Point3::new((t/100.0).sin()*cam_radius, 0.5, (t/100.0).cos()*cam_radius);
+
+    let view_mat: Matrix4<f32> = nalgebra::to_homogeneous(
+      &Isometry3::look_at_rh(&cam,
+                             &Point3::new(0.0, 0.0, 0.0),
+                             &Vector3::new(0.0, 1.0, 0.0)));
+
     let projection_mat: Matrix4<f32> = {
-      let ratio = height as f32 / width as f32;
+      let ratio    = width as f32 / height as f32;
       let fov: f32 = 3.141592 / 3.0;
-      let zfar = 100.0;
-      let znear = 1.0;
+      let zfar     = 1024.0;
+      let znear    = 0.1;
 
-      if cfg!(feature="nalgebra_view") {
-        let mut m = PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix();
-        m = nalgebra::transpose(&m);
-        m = nalgebra::inverse(&m).unwrap();
-        m
-      } else {
-        let f = 1.0 / (fov / 2.0).tan();
-        Matrix4::new(f *     ratio   ,    0.0,              0.0              ,   0.0,
-                     0.0             ,     f ,              0.0              ,   0.0,
-                     0.0             ,    0.0,  (zfar+znear)/(zfar-znear)    ,   1.0,
-                     0.0             ,    0.0, -(2.0*zfar*znear)/(zfar-znear),   0.0)
-
-      }
+      PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix()
     };
 
-    let radius = 3.0;
-    // let cam = Vector3::new((x/100.0).sin()*radius, 0.0, (x/100.0).cos()*radius);
-    let cam = Vector3::new((t/100.0).sin()*radius, 0.0, (t/100.0).cos()*radius);
-    // let direction = transform.pos-cam;
-    let direction = transform.pos-cam;
-    println!("cam:       {:?}", cam);
-    println!("direction: {:?}", direction);
-    
-    let view_mat = view_matrix(&cam,
-                               &direction, 
-                               &Vector3::new(0.0, 1.0, 0.0));
-    let model_mat = transform.as_matrix();
-    let model_view_mat = model_mat * view_mat;
-    let normal_mat = nalgebra::transpose(&nalgebra::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap());
-    
     //let light = Vector3::<f32>::new(-2.0, 0.0, 0.0);
-    let light = Vector3::<f32>::new(2.0, 1.0, 3.0);
+    let light = Vector3::<f32>::new(-2.0, 1.0, 0.0);
     
-    let uniforms = uniform! {
-      modelMatrix: matrix4_as_array(&model_mat),
-      projectionMatrix: matrix4_as_array(&projection_mat),
-      viewMatrix: matrix4_as_array(&view_mat),
+    // Unit Vectors
+    {
+      let vertex_src = r##"
+#version 140
+
+in vec3 position;
+
+out vec3 vertPosition;
+
+uniform mat4 projectionMatrix;
+uniform mat4 modelViewMatrix;
+
+void main() {
+  vertPosition = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+"##;
+
+      let fragment_src = r##"
+#version 140
+
+in vec3 vertPosition;
+out vec4 color;
+
+void main() {
+  color = vec4(vertPosition, 1.0);
+}
+"##;
       
-      modelViewMatrix: matrix4_as_array(&model_view_mat),
-      normalMatrix: matrix3_as_array(&normal_mat),
-      lightPosition: [light.x, light.y, light.z],
-    };
-    
-    target.draw((&positions),
-                &indices,
-                &program,
-                &uniforms,
-                &params)
-      .unwrap();
+      let program = glium::Program::from_source(&display,
+                                                &vertex_src,
+                                                &fragment_src,
+                                                None).unwrap();
+
+      for dir in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].into_iter() {
+        let vertices: Vec<Vertex> = [[0.0; 3], *dir].into_iter()
+          .map(|d| Vertex {
+            position: *d,
+            normal:  [0.0; 3],
+            texture: [0.0; 2]
+          }).collect();
+        
+        let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
+        let indices = glium::index::NoIndices(glium::index::PrimitiveType::LinesList);
+
+        let model_mat: Matrix4<f32> = (Transform {
+          pos: Vector3::new(0.0, 0.0, 0.0),
+          rot: nalgebra::one(),
+          scale: nalgebra::one(),
+        }).as_matrix();
+
+        let model_view_mat: Matrix4<f32> = view_mat * model_mat;
+
+        let uniforms = uniform! {
+          modelMatrix: matrix4_as_array(&model_mat),
+          projectionMatrix: matrix4_as_array(&projection_mat),
+          viewMatrix: matrix4_as_array(&view_mat),
+          
+          modelViewMatrix: matrix4_as_array(&model_view_mat),
+        };
+
+        target.draw((&positions),
+                    &indices,
+                    &program,
+                    &uniforms,
+                    &params)
+          .unwrap();
+      }
+    }
+
+    // Teapot
+    if draw_teapot {
+      let mut scale = x / width as f32;
+      if !scale.is_normal() || scale < 0.01 {
+        scale = 1.0;
+      }
+      
+      let mut transform = Transform {
+        pos: Vector3::new(0.0, -0.5, 0.0),
+        rot: UnitQuaternion::from_axisangle(nalgebra::Unit::new(&Vector3::new(0.0, 1.0, 0.0)),
+                                            0.0),
+        scale: nalgebra::one::<Vector3<f32>>()*scale,
+      };
+
+      let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
+      // let normals   = glium::VertexBuffer::new(&display, &indices).unwrap();
+      // let indices   = glium::index::IndexBuffer::new(&display, glium::index::PrimitiveType::TrianglesList, &indices).unwrap();
+      let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
+      
+      let program = glium::Program::from_source(&display,
+                                                &VERTEX_SHADER_SRC,
+                                                &FRAGMENT_SHADER_SRC,
+                                                None).unwrap();
+
+      // transform.rot = quat_rotate(t/50.0, &Vector3::new(0.0, 1.0, 0.0));
+      // transform.pos.x = x*5.0 / width as f32;
+      // transform.pos.z = y*5.0 / width as f32;
+      // let scale = t/500.0;
+      // transform.scale = Vector3::new(scale, scale, scale);
+      
+      let model_mat = transform.as_matrix();
+      let model_view_mat = view_mat * model_mat;
+      let normal_mat = nalgebra::transpose(&nalgebra::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap());
+      
+      let uniforms = uniform! {
+        modelMatrix: matrix4_as_array(&model_mat),
+        projectionMatrix: matrix4_as_array(&projection_mat),
+        viewMatrix: matrix4_as_array(&view_mat),
+        
+        modelViewMatrix: matrix4_as_array(&model_view_mat),
+        normalMatrix: matrix3_as_array(&normal_mat),
+        lightPosition: [light.x, light.y, light.z],
+      };
+
+      target.draw((&positions),
+                  &indices,
+                  &program,
+                  &uniforms,
+                  &params)
+        .unwrap();
+    }
     
     target.finish().unwrap();
 
     for ev in display.poll_events() {
       println!("{:?}", ev);
+      use glium::glutin::*;
       match ev {
-        glium::glutin::Event::Closed => return,
-        glium::glutin::Event::MouseMoved(xx,yy) => {
+        Event::Closed => return,
+        Event::MouseMoved(xx,yy) => {
           x = xx as f32;
           y = yy as f32;
         },
+        Event::MouseInput(ElementState::Pressed, MouseButton::Left) => {
+          draw_teapot = !draw_teapot;
+        },
+        Event::MouseInput(state, MouseButton::Right) => {
+          t = 0.0;
+        }
         _ => (),
       }
     }
   }
 }
 
-fn view_matrix(position: &Vector3<f32>,
-               direction: &Vector3<f32>,
-               up: &Vector3<f32>) -> Matrix4<f32> {
-  let f = if cfg!(feature="nalgebra_view") {
-    nalgebra::normalize(direction)*Vector3::new(0.0, 0.0, -1.0)
-  } else {
-    nalgebra::normalize(direction)
-  };
-  
-  let s = Vector3::new(up.y * f.z - up.z * f.y,
-                       up.z * f.x - up.x * f.z,
-                       up.x * f.y - up.y * f.x);
-  let s_norm = nalgebra::normalize(&s);
-
-  let u = Vector3::new(f.y * s_norm.z - f.z * s_norm.y,
-                       f.z * s_norm.x - f.x * s_norm.z,
-                       f.x * s_norm.y - f.y * s_norm.x);
-
-  let p = Vector3::new(-position.x * s_norm.x - position.y * s_norm.y - position.z * s_norm.z,
-                       -position.x * u.x - position.y * u.y - position.z * u.z,
-                       -position.x * f.x - position.y * f.y - position.z * f.z);
-
-  Matrix4::new(s_norm.x, u.x, f.x, 0.0,
-               s_norm.y, u.y, f.y, 0.0,
-               s_norm.z, u.z, f.z, 0.0,
-               p.x, p.y, p.z, 1.0)
-}
-
 fn matrix4_as_array<T: Copy+Clone>(m: &Matrix4<T>) -> [[T; 4]; 4] {
-  [[m[(0,0)], m[(0,1)], m[(0,2)], m[(0,3)]],
-   [m[(1,0)], m[(1,1)], m[(1,2)], m[(1,3)]],
-   [m[(2,0)], m[(2,1)], m[(2,2)], m[(2,3)]],
-   [m[(3,0)], m[(3,1)], m[(3,2)], m[(3,3)]]]
+  // [[m[(0,0)], m[(0,1)], m[(0,2)], m[(0,3)]],
+  //  [m[(1,0)], m[(1,1)], m[(1,2)], m[(1,3)]],
+  //  [m[(2,0)], m[(2,1)], m[(2,2)], m[(2,3)]],
+  //  [m[(3,0)], m[(3,1)], m[(3,2)], m[(3,3)]]]
+
+  [[m[(0,0)], m[(1,0)], m[(2,0)], m[(3,0)]],
+   [m[(0,1)], m[(1,1)], m[(2,1)], m[(3,1)]],
+   [m[(0,2)], m[(1,2)], m[(2,2)], m[(3,2)]],
+   [m[(0,3)], m[(1,3)], m[(2,3)], m[(3,3)]]]
 }
 
 fn matrix3_as_array<T: Copy+Clone>(m: &Matrix3<T>) -> [[T; 3]; 3] {
-  [[m[(0,0)], m[(0,1)], m[(0,2)]],
-   [m[(1,0)], m[(1,1)], m[(1,2)]],
-   [m[(2,0)], m[(2,1)], m[(2,2)]],
-   ]
+  // TODO: Transpose
+  [[m[(0,0)], m[(1,0)], m[(2,0)]],
+   [m[(0,1)], m[(1,1)], m[(2,1)]],
+   [m[(0,2)], m[(1,2)], m[(2,2)]]]
 }
 
 
 fn matrix3_from_matrix4<T: Copy>(m: &Matrix4<T>) -> Matrix3<T> {
-  Matrix3::new(m[(0,0)], m[(0,1)], m[(0,2)],
-               m[(1,0)], m[(1,1)], m[(1,2)],
-               m[(2,0)], m[(2,1)], m[(2,2)])
+  Matrix3::new(m[(0,0)], m[(1,0)], m[(2,0)],
+               m[(0,1)], m[(1,1)], m[(2,1)],
+               m[(0,2)], m[(1,2)], m[(2,2)])
+}
+
+fn quat_rotate<T: Copy+nalgebra::BaseFloat>(angle: T, axis: &Vector3<T>) -> UnitQuaternion<T> {
+  UnitQuaternion::from_axisangle(nalgebra::Unit::new(axis), angle)
 }
