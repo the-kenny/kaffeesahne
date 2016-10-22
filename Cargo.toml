@@ -1,0 +1,14 @@
+[package]
+name = "opengl"
+version = "0.1.0"
+authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
+
+[dependencies]
+glium = "*"
+image = "*"
+nalgebra = "*"
+tobj = "*"
+
+[features]
+default = []
+nalgebra_view = []
