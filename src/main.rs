@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
 use nalgebra as na;
+use glium as gl;
 
 mod storage_manager;
 
@@ -30,6 +31,16 @@ impl Transform {
                           0.0, 0.0, 1.0, self.pos.z,
                           0.0, 0.0, 0.0, 1.0);
     model
+  }
+}
+
+impl Default for Transform {
+  fn default() -> Self {
+    Transform {
+      pos: na::zero(),
+      rot: na::one(),
+      scale: na::one(),
+    }
   }
 }
 
@@ -58,111 +69,15 @@ impl From<Vector3<f32>> for Normal {
   }
 }
 
-struct Mesh {
-  vertices: Vec<Vertex>,
-  indices:  Vec<u32>,
-  normals:  Vec<Normal>,
-}
-
-impl Mesh {
-  fn load_from_file<P: AsRef<Path>>(path: P) -> Self {
-    let obj = tobj::load_obj(path.as_ref());
-    let (models, _materials) = obj.unwrap();
-
-    let model = &models[0];
-    println!("model.name = {}", model.name);
-
-    let mesh = &model.mesh;
-    assert!(mesh.positions.len() % 3 == 0);
-
-    let indices = mesh.indices.clone();
-
-    let mut vertices = Vec::with_capacity(mesh.positions.len()/3);
-    for f in 0..mesh.positions.len() / 3 {
-      let position = Vector3::new(mesh.positions[3 * f],
-                                  mesh.positions[3 * f + 1],
-                                  mesh.positions[3 * f + 2]);
-      vertices.push(position);
-    }
-
-
-    let mut normals = vec![na::zero(); vertices.len()];
-
-    if mesh.normals.len() > 0 {
-      println!("Got normals in obj file");
-      for f in 0..mesh.normals.len() / 3 {
-        let normal = Vector3::new(mesh.normals[3 * f],
-                                  mesh.normals[3 * f + 1],
-                                  mesh.normals[3 * f + 2]);
-        normals[f] = normal;
-      }
-    } else {
-      println!("Calculating our own normals :-(");
-      // Go over all Tris and calculate normals ourselves
-      for f in 0..indices.len()/3 {
-        let idx1 = indices[3*f] as usize;
-        let idx2 = indices[3*f+1] as usize;
-        let idx3 = indices[3*f+2] as usize;
-
-        let v1 = vertices[idx1];
-        let v2 = vertices[idx2];
-        let v3 = vertices[idx3];
-        let normal  = na::normalize(&na::cross(&(v2-v1), &(v3-v1)));
-
-        normals[idx1] = normal;
-        normals[idx2] = normal;
-        normals[idx3] = normal;
-      }
-    }
-
-    println!("vertices.len: {}", vertices.len());
-    println!("indices.len: {}", indices.len());
-    println!("normals.len: {}", normals.len());
-
-    Mesh {
-      vertices: vertices.into_iter().map(Vertex::from).collect(),
-      indices:  indices,
-      normals:  normals.into_iter().map(Normal::from).collect(),
-    }
-  }
-
-  fn draw<S, U>(&self,
-                program: &glium::Program,
-                frame: &mut S,
-                mesh: &BufferedMesh,
-                uniforms: &U) -> ()
-    where S: glium::Surface, U: glium::uniforms::Uniforms {
-    // let positions = glium::VertexBuffer::new(display, &self.vertices).unwrap();
-    // let normals   = glium::VertexBuffer::new(display, &self.normals).unwrap();
-    // let indices   = glium::index::IndexBuffer::new(display, glium::index::PrimitiveType::TrianglesList, &self.indices).unwrap();
-
-    let params = glium::DrawParameters {
-      depth: glium::Depth {
-        test: glium::draw_parameters::DepthTest::IfLess,
-        write: true,
-        .. Default::default()
-      },
-      .. Default::default()
-    };
-
-    frame.draw((&mesh.positions, &mesh.normals),
-               &mesh.indices,
-               &program,
-               uniforms,
-               &params)
-      .unwrap();
-  }
-}
-
 struct BufferedMesh {
-  positions: glium::VertexBuffer<Vertex>,
-  normals:   glium::VertexBuffer<Normal>,
-  indices:   glium::index::IndexBuffer<u32>,
+  positions: gl::VertexBuffer<Vertex>,
+  normals:   gl::VertexBuffer<Normal>,
+  indices:   gl::index::IndexBuffer<u32>,
 }
 
 struct ResourceManager {
   meshes:   HashMap<&'static str, BufferedMesh>,
-  programs: HashMap<&'static str, glium::Program>,
+  programs: HashMap<&'static str, gl::Program>,
 }
 
 impl ResourceManager {
@@ -174,7 +89,7 @@ impl ResourceManager {
   }
 
   fn compile_shader<P: AsRef<Path>>(&mut self,
-                                    display: &glium::Display,
+                                    display: &gl::Display,
                                     name: &'static str,
                                     vertex: P,
                                     fragment: P) {
@@ -194,17 +109,20 @@ impl ResourceManager {
       src
     };
 
-    let program = glium::Program::from_source(display,
-                                              &vertex_src,
-                                              &fragment_src,
-                                              None).unwrap();
+    let program = gl::Program::from_source(display,
+                                           &vertex_src,
+                                           &fragment_src,
+                                           None).unwrap();
     self.programs.insert(name, program);
   }
 
-  fn load_obj<P: AsRef<Path>>(&mut self,
-                              display: &glium::Display,
-                              name: &'static str,
-                              path: P) {
+  fn load_obj<P>(&mut self,
+                 display: &gl::Display,
+                 name: &'static str,
+                 path: P)
+    where P: AsRef<Path>+std::fmt::Display {
+    println!("Loading {} from {}", name, path);
+    
     let obj = tobj::load_obj(path.as_ref());
     let (models, _materials) = obj.unwrap();
 
@@ -260,11 +178,11 @@ impl ResourceManager {
     println!("normals.len: {}", normals.len());
 
     let vertices: Vec<_> = vertices.into_iter().map(Vertex::from).collect();
-    let normals:   Vec<_> = normals.into_iter().map(Normal::from).collect();
+    let normals:  Vec<_> = normals.into_iter().map(Normal::from).collect();
     
-    let positions = glium::VertexBuffer::new(display, &vertices).unwrap();
-    let normals   = glium::VertexBuffer::new(display, &normals).unwrap();
-    let indices   = glium::index::IndexBuffer::new(display, glium::index::PrimitiveType::TrianglesList, &indices).unwrap();
+    let positions = gl::VertexBuffer::new(display, &vertices).unwrap();
+    let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
+    let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
     self.meshes.insert(name, BufferedMesh {
       positions: positions,
@@ -274,75 +192,121 @@ impl ResourceManager {
   }
 }
 
-// enum ComponentType {
-//   Mesh,
-// }
-
 struct WorldUniforms {
   projection_matrix: Matrix4<f32>,
   view_matrix:       Matrix4<f32>,
-  light_position:    [f32; 3],  // TODO
+  light_position:    Point3<f32>,
 }
 
+#[derive(Copy, Clone)]
+struct Mesh {
+  geometry: &'static str,
+  program:  &'static str,
+}
+
+#[derive(Copy, Clone)]
+enum Component {
+  Geometry(Mesh),               // Index 0
+  Empty,                        // Empty Marker
+}
+
+// TODO: Keeping those numbers in sync is annoying
+#[derive(Copy, Clone)]
+enum ComponentType {
+  Geometry = 0,
+}
+
+#[derive(Copy, Clone)]
+struct ComponentStore([Component; 2]);
+
+use std::ops::{Index, IndexMut};
+impl Index<ComponentType> for ComponentStore {
+  type Output = Component;
+  fn index(&self, idx: ComponentType) -> &Self::Output {
+    &self.0[idx as usize]
+  }
+}
+
+impl IndexMut<ComponentType> for ComponentStore {
+  fn index_mut(&mut self, idx: ComponentType) -> &mut Self::Output {
+    &mut self.0[idx as usize]
+  }
+}
+
+
+impl Default for ComponentStore {
+  fn default() -> Self {
+    ComponentStore([Component::Empty; 2])
+  }
+}
+
+impl From<Vec<Component>> for ComponentStore {
+  fn from(other: Vec<Component>) -> Self {
+    let mut store = Self::default();
+    for c in other.into_iter() {
+      let idx = match c {
+        Component::Geometry(_) => Some(ComponentType::Geometry),
+        Component::Empty       => None,
+      };
+      idx.map(|idx| store[idx] = c);
+    }
+    store
+  }
+}
+
+#[derive(Clone)]
 struct GameObject {
-  mesh: (&'static str, &'static str),       // TODO
+  components: ComponentStore,
   transform: Transform,
 }
 
 impl GameObject {
-  fn draw<S: glium::Surface>(&self,
-                             target: &mut S,
-                             resources: &ResourceManager,
-                             world_uniforms: &WorldUniforms) {
+  fn draw<S: gl::Surface>(&self,
+                          target: &mut S,
+                          resources: &ResourceManager,
+                          world_uniforms: &WorldUniforms) {
+    if let Component::Geometry(ref mesh) = self.components[ComponentType::Geometry] {
+      let view_mat       = world_uniforms.view_matrix;
+      let model_mat      = self.transform.as_matrix();
+      let model_view_mat = view_mat * model_mat;
+      let normal_mat     = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
-    let view_mat = world_uniforms.view_matrix;
-    let model_mat = self.transform.as_matrix();
-    let model_view_mat = view_mat * model_mat;
-    let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
-    let projection_mat = world_uniforms.projection_matrix;
+      let world_uniforms = uniform! {
+        modelMatrix:      model_mat.as_uniform(),
+        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
+        viewMatrix:       view_mat.as_uniform(),
+        modelViewMatrix:  model_view_mat.as_uniform(),
+        normalMatrix:     normal_mat.as_uniform(),
+        lightPosition:    world_uniforms.light_position.as_uniform(),
+      };
 
-    let uniforms = uniform! {
-      modelMatrix:      model_mat.as_uniform(),
-      projectionMatrix: projection_mat.as_uniform(),
-      viewMatrix:       view_mat.as_uniform(),
-      modelViewMatrix:  model_view_mat.as_uniform(),
-      normalMatrix:     normal_mat.as_uniform(),
-      lightPosition:    world_uniforms.light_position,
-    };
-
-    // TODO: Pull out somewhere
-    let params = glium::DrawParameters {
-      depth: glium::Depth {
-        test: glium::draw_parameters::DepthTest::IfLess,
-        write: true,
+      // TODO: Pull out somewhere
+      let params = gl::DrawParameters {
+        depth: gl::Depth {
+          test: gl::draw_parameters::DepthTest::IfLess,
+          write: true,
+          .. Default::default()
+        },
         .. Default::default()
-      },
-      .. Default::default()
-    };
+      };
 
-    let ref mesh = resources.meshes[&self.mesh.0];
-    let ref program = resources.programs[&self.mesh.1];
-    target.draw((&mesh.positions, &mesh.normals),
-                &mesh.indices,
-                program,
-                &uniforms,
-                &params)
-      .unwrap();
+      let ref buffers = resources.meshes[&mesh.geometry];
+      let ref program = resources.programs[&mesh.program];
+      target.draw((&buffers.positions, &buffers.normals),
+                  &buffers.indices,
+                  program,
+                  &world_uniforms,
+                  &params)
+        .unwrap();
+    }
   }
 }
-
-// impl GameObject {
-//   fn draw(&self, surface: &glium::Surface, ) {
-
-//   }
-// }
-
 use std::env;
 fn main() {
   let filename = env::args().skip(1).next().unwrap();
 
   use glium::{DisplayBuild, Surface};
-  let display = glium::glutin::WindowBuilder::new()
+  let display = gl::glutin::WindowBuilder::new()
     .with_depth_buffer(24)
     .build_glium().unwrap();
 
@@ -353,10 +317,31 @@ fn main() {
                            "src/shaders/basic.vertex.glsl",
                            "src/shaders/basic.fragment.glsl");
 
+  let object1 = {
+    let geometry = Mesh {
+      geometry: "object",
+      program:  "object",
+    };
+
+    let scale = 0.5;
+    let transform = Transform {
+      pos: Vector3::new(0.0, -0.5, 0.0),
+      rot: na::one(),
+      scale: Vector3::new(1.0, 1.0, 1.0)*scale,
+    };
+
+    
+    GameObject {
+      components: vec![Component::Geometry(geometry)].into(),
+      transform: transform,
+    }
+  };
+
+  let mut objects = vec![object1];
+  
   let mut t: f32 = 0.0;
   let mut x: f32 = 0.0;
   let mut y: f32 = 0.0;
-  let mut draw_object = true;
 
   loop {
     let mut target = display.draw();
@@ -366,21 +351,12 @@ fn main() {
 
     t += 1.0;
 
-    let params = glium::DrawParameters {
-      depth: glium::Depth {
-        test: glium::draw_parameters::DepthTest::IfLess,
-        write: true,
-        .. Default::default()
-      },
-      .. Default::default()
-    };
-
     // Camera
     // let cam_radius = (x / width as f32) * 3.0;
     // println!("cam_radius: {}", cam_radius);
     let cam_radius = 3.0;
     let cam = Point3::new(0.0, 1.5, 3.0);
-    let cam_target = Point3::new(0.0, 0.0, 0.0);
+    let cam_target = objects[0].transform.pos.to_point();
     
     // let light = Vector3::<f32>::new(-2.0, 1.0, 3.0);
     let light = Vector3::<f32>::new(1.5, (t/50.0).sin()*2.0, (t/50.0).cos()*2.0);
@@ -399,119 +375,18 @@ fn main() {
       PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix()
     };
 
-    // let light = cam;
-
-    // Unit Vectors
-    //    {
-    //       let vertex_src = r##"
-    // #version 140
-
-    // in vec3 position;
-
-    // flat out vec3 direction;
-
-    // uniform mat4 projectionMatrix;
-    // uniform mat4 modelViewMatrix;
-
-    // void main() {
-    //   direction = position;
-    //   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    // }
-    // "##;
-
-    //       let fragment_src = r##"
-    // #version 140
-
-    // flat in vec3 direction;
-    // out vec4 color;
-
-    // void main() {
-    //   color = vec4(direction, 1.0);
-    // }
-    // "##;
-
-    //       let program = glium::Program::from_source(&display,
-    //                                                 &vertex_src,
-    //                                                 &fragment_src,
-    //                                                 None).unwrap();
-
-    //       for dir in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].into_iter() {
-    //         let vertices: Vec<Vertex> = [[0.0; 3], *dir].into_iter()
-    //           .map(|d| Vertex {
-    //             position: *d,
-    //             normal:  [0.0; 3],
-    //             texture: [0.0; 2]
-    //           }).collect();
-
-    //         let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
-    //         let indices = glium::index::NoIndices(glium::index::PrimitiveType::LinesList);
-
-    //         let model_mat: Matrix4<f32> = (Transform {
-    //           pos: Vector3::new(0.0, 0.0, 0.0),
-    //           rot: na::one(),
-    //           scale: na::one(),
-    //         }).as_matrix();
-
-    //         let model_view_mat: Matrix4<f32> = view_mat * model_mat;
-
-    //         let uniforms = uniform! {
-    //           modelMatrix:      (model_mat).as_uniform(),
-    //           projectionMatrix: (projection_mat).as_uniform(),
-    //           viewMatrix:       (view_mat).as_uniform(),
-
-    //           modelViewMatrix:  (model_view_mat).as_uniform(),
-    //         };
-
-    //         target.draw((&positions),
-    //                     &indices,
-    //                     &program,
-    //                     &uniforms,
-    //                     &params)
-    //           .unwrap();
-    //       }
-    //     }
-
-    // Object
-    if draw_object {
-      // let mut scale = x / width as f32;
-      // if !scale.is_normal() || scale < 0.01 {
-      //   scale = 1.0;
-      // }
-
-      let scale = 0.5;
-
-      let mut transform = Transform {
-        pos: Vector3::new(0.0, -0.5, 0.0),
-        rot: UnitQuaternion::from_axisangle(na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)),
-                                            0.0),
-        scale: na::one::<Vector3<f32>>()*scale,
-      };
-
-      transform.rot = quat_rotate(t/200.0, &Vector3::new(0.0, 1.0, 0.0));
-      // transform.pos.x = x*5.0 / width as f32;
-      // transform.pos.z = y*5.0 / width as f32;
-      // let scale = t/500.0;
-      // transform.scale = Vector3::new(scale, scale, scale);
-
-
-      let object = GameObject {
-        mesh: ("object", "object"),
-        transform: transform,
-      };
-      
-      let model_mat = transform.as_matrix();
-      let model_view_mat = view_mat * model_mat;
-      let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
-
-      let uniforms = WorldUniforms {
-        projection_matrix: projection_mat,
-        view_matrix:       view_mat,
-        light_position:    [light.x, light.y, light.z], // TODO
-      };
-      
+    let world_uniforms = WorldUniforms {
+      projection_matrix: projection_mat,
+      view_matrix:       view_mat,
+      light_position:    Point3::new(light.x, light.y, light.z),
+    };
+    
+    objects[0].transform.rot = quat_rotate(t/200.0, &Vector3::new(0.0, 1.0, 0.0));
+    
+    for object in objects.iter() {
       object.draw(&mut target,
                   &resources,
-                  &uniforms);
+                  &world_uniforms);
     }
 
     target.finish().unwrap();
@@ -524,9 +399,6 @@ fn main() {
         Event::MouseMoved(xx,yy) => {
           x = xx as f32;
           y = yy as f32;
-        },
-        Event::MouseInput(ElementState::Pressed, MouseButton::Left) => {
-          draw_object = !draw_object;
         },
         Event::MouseInput(_, MouseButton::Right) => {
           t = 0.0;
@@ -546,8 +418,8 @@ pub trait AsUniform<T>
 }
 
 impl<T: Copy> AsUniform<[[T; 3]; 3]> for Matrix3<T> { }
-
 impl<T: Copy> AsUniform<[[T; 4]; 4]> for Matrix4<T> { }
+impl<T: Copy> AsUniform<[T; 3]>      for Point3<T>  { }
 
 // fn matrix3_as_array<T: Copy+Clone>(m: &Matrix3<T>) -> [[T; 3]; 3] {
 //   m.as_ref().clone()
