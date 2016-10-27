@@ -205,8 +205,22 @@ struct Mesh {
 }
 
 #[derive(Copy, Clone)]
+struct Bob {
+  direction: Vector3<f32>,
+  period: f32,
+  delta: f32,
+}
+
+impl Bob {
+  fn update(&self, parent: &mut GameObject, t: f32) {
+    parent.transform.pos += self.direction*((t+self.delta)/self.period).sin();
+  }
+}
+
+#[derive(Copy, Clone)]
 enum Component {
   Geometry(Mesh),               // Index 0
+  Bob(Bob),                     // Index 1
   Empty,                        // Empty Marker
 }
 
@@ -214,6 +228,7 @@ enum Component {
 #[derive(Copy, Clone)]
 enum ComponentType {
   Geometry = 0,
+  Bob = 1,
 }
 
 #[derive(Copy, Clone)]
@@ -246,6 +261,7 @@ impl From<Vec<Component>> for ComponentStore {
     for c in other.into_iter() {
       let idx = match c {
         Component::Geometry(_) => Some(ComponentType::Geometry),
+        Component::Bob(_)      => Some(ComponentType::Bob),
         Component::Empty       => None,
       };
       idx.map(|idx| store[idx] = c);
@@ -254,10 +270,23 @@ impl From<Vec<Component>> for ComponentStore {
   }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 struct GameObject {
   components: ComponentStore,
   transform: Transform,
+}
+
+impl GameObject {
+  fn update(&mut self, t: f32) {
+    let mut new = self.clone();
+    for component in self.components.0.iter() {
+      match *component {
+        Component::Bob(ref bob) => bob.update(&mut new, t),
+        _ => (),
+      }
+    }
+    self.transform = new.transform;
+  }
 }
 
 impl GameObject {
@@ -303,24 +332,23 @@ impl GameObject {
 }
 use std::env;
 fn main() {
-  let filename = env::args().skip(1).next().unwrap();
-
   use glium::{DisplayBuild, Surface};
   let display = gl::glutin::WindowBuilder::new()
     .with_depth_buffer(24)
     .build_glium().unwrap();
 
   let mut resources = ResourceManager::new();
-  resources.load_obj(&display, "object", filename);
+  resources.load_obj(&display, "terrain", "terrain.obj");
+  resources.load_obj(&display, "cube", "cube.obj");
   resources.compile_shader(&display,
-                           "object",
+                           "basic",
                            "src/shaders/basic.vertex.glsl",
                            "src/shaders/basic.fragment.glsl");
 
-  let object1 = {
+  let terrain = {
     let geometry = Mesh {
-      geometry: "object",
-      program:  "object",
+      geometry: "terrain",
+      program:  "basic",
     };
 
     let scale = 0.5;
@@ -337,7 +365,35 @@ fn main() {
     }
   };
 
-  let mut objects = vec![object1];
+  let mut objects = vec![terrain];
+
+  // Generate some cubes
+  for n in 0..50 {
+    let geometry = Mesh {
+      geometry: "cube",
+      program:  "basic",
+    };
+
+    let n = n as f32;
+    let bob = Bob {
+      direction: Vector3::new(0.0, 0.10, 0.0),
+      period: 20.0,
+      delta: n*11.0,
+    };
+
+    let scale = 0.1;
+    let transform = Transform {
+      pos: Vector3::new(n*3.0 - 50.0, 0.5, 0.0),
+      rot: na::one(),
+      scale: Vector3::new(1.0, 1.0, 1.0)*scale,
+    };
+
+    let obj = GameObject {
+      components: vec![Component::Geometry(geometry), Component::Bob(bob)].into(),
+      transform: transform,
+    };
+    objects.push(obj);
+  };
   
   let mut t: f32 = 0.0;
   let mut x: f32 = 0.0;
@@ -358,8 +414,8 @@ fn main() {
     let cam = Point3::new(0.0, 1.5, 3.0);
     let cam_target = objects[0].transform.pos.to_point();
     
-    // let light = Vector3::<f32>::new(-2.0, 1.0, 3.0);
-    let light = Vector3::<f32>::new(1.5, (t/50.0).sin()*2.0, (t/50.0).cos()*2.0);
+    let light = Vector3::<f32>::new(-3.0, 1.0, 3.0);
+    // let light = Vector3::<f32>::new(1.5, (t/50.0).sin()*2.0, (t/50.0).cos()*2.0);
     
     let view_mat: Matrix4<f32> = na::to_homogeneous(
       &Isometry3::look_at_rh(&cam,
@@ -380,8 +436,13 @@ fn main() {
       view_matrix:       view_mat,
       light_position:    Point3::new(light.x, light.y, light.z),
     };
-    
-    objects[0].transform.rot = quat_rotate(t/200.0, &Vector3::new(0.0, 1.0, 0.0));
+
+    for object in &mut objects {
+      object.update(t);
+      
+      // TODO: Move to GameObject / Rotation-Component
+      object.transform.rot = quat_rotate(t/200.0, &Vector3::new(0.0, 1.0, 0.0));
+    }
     
     for object in objects.iter() {
       object.draw(&mut target,
