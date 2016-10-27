@@ -204,6 +204,12 @@ struct Mesh {
   program:  &'static str,
 }
 
+impl UpdateComponent for Mesh {}
+
+trait UpdateComponent {
+  fn update(&mut self, _parent: &mut GameObject, t: f32) {}
+}
+
 #[derive(Copy, Clone)]
 struct Bob {
   direction: Vector3<f32>,
@@ -211,8 +217,8 @@ struct Bob {
   delta: f32,
 }
 
-impl Bob {
-  fn update(&self, parent: &mut GameObject, t: f32) {
+impl UpdateComponent for Bob {
+  fn update(&mut self, parent: &mut GameObject, t: f32) {
     parent.transform.pos += self.direction*((t+self.delta)/self.period).sin();
   }
 }
@@ -222,6 +228,17 @@ enum Component {
   Geometry(Mesh),               // Index 0
   Bob(Bob),                     // Index 1
   Empty,                        // Empty Marker
+}
+
+impl UpdateComponent for Component {
+  fn update(&mut self, parent: &mut GameObject, t: f32) {
+    use Component::*;
+    match *self {
+      Geometry(ref mut geometry) => geometry.update(parent, t),
+      Bob(ref mut bob) => bob.update(parent, t),
+      _ => (),
+    }
+  }
 }
 
 // TODO: Keeping those numbers in sync is annoying
@@ -279,11 +296,8 @@ struct GameObject {
 impl GameObject {
   fn update(&mut self, t: f32) {
     let mut new = self.clone();
-    for component in self.components.0.iter() {
-      match *component {
-        Component::Bob(ref bob) => bob.update(&mut new, t),
-        _ => (),
-      }
+    for component in self.components.0.iter_mut() {
+      component.update(&mut new, t);
     }
     self.transform = new.transform;
   }
