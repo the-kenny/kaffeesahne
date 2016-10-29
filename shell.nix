@@ -6,7 +6,7 @@ let
 in 
 stdenv.mkDerivation {
   name = "android-sdk-fhs-shell";
-  buildInputs = with pkgs; [ cargo rustc ];
+  buildInputs = with pkgs; [ cargo rustc gdb ];
   shellHook = "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libPath}";
 
   RUST_BACKTRACE=1;
