@@ -1,5 +1,5 @@
 use nalgebra as na;
-use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
+use nalgebra::{Vector3, UnitQuaternion, Matrix4};
 
 #[derive(Copy, Clone)]
 pub struct Transform {

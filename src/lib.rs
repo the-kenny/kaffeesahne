@@ -1,5 +1,5 @@
 #[macro_use] extern crate glium;
-extern crate nalgebra;
+pub extern crate nalgebra;
 
 pub use nalgebra as na;
 pub use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
@@ -25,7 +25,7 @@ impl GameObject {
       let model_view_mat = view_mat * model_mat;
       let normal_mat     = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
-      let world_uniforms = uniform! {
+      let uniforms = uniform! {
         modelMatrix:      model_mat.as_uniform(),
         projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
         viewMatrix:       view_mat.as_uniform(),
@@ -49,7 +49,7 @@ impl GameObject {
       target.draw((&buffers.positions, &buffers.normals),
                   &buffers.indices,
                   program,
-                  &world_uniforms,
+                  &uniforms,
                   &params)
         .unwrap();
     }

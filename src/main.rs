@@ -1,6 +1,5 @@
 #[macro_use] extern crate glium;
 extern crate image;
-extern crate nalgebra;
 extern crate opengl;
 
 use glium as gl;

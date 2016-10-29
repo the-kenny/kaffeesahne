@@ -1,7 +1,6 @@
 // use std::convert::TryFrom;
 use super::geometry::*;
 use nalgebra as na;
-use glium as gl;
 
 trait Tick {
   fn tick(&mut self, _parent: &mut GameObject, t: f32) {}
