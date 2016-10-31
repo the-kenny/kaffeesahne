@@ -157,11 +157,11 @@ impl IndexMut<ComponentSlotIndex> for ComponentStore {
   }
 }
 
-// impl Default for ComponentStore {
-//   fn default() -> Self {
-//     ComponentStore([Component::Empty; 2])
-//   }
-// }
+impl Default for ComponentStore {
+  fn default() -> Self {
+    Self::new()
+  }
+}
 
 impl<C: Into<ComponentSlot>> From<Vec<C>> for ComponentStore {
   fn from(other: Vec<C>) -> Self {
