@@ -3,7 +3,7 @@ use super::geometry::*;
 use nalgebra as na;
 
 trait Tick {
-  fn tick(&mut self, _parent: &mut GameObject, t: f32) {}
+  fn tick(&mut self, _parent: &mut GameObject, _t: f32) {}
 }
 
 #[derive(Copy, Clone)]
@@ -22,7 +22,7 @@ impl GameObject {
   }
 }
 
-// Visible Geometry
+// Visible Mesh
 #[derive(Copy, Clone)]
 pub struct Mesh {
   pub geometry: &'static str,
@@ -31,19 +31,12 @@ pub struct Mesh {
 
 impl Tick for Mesh {}
 
-// TODO: Macro
-impl Into<ComponentSlot> for Mesh {
-  fn into(self) -> ComponentSlot {
-    ComponentSlot::Geometry(self)
-  }
-}
-
 // TODO
 // impl TryFrom<ComponentSlot> for Mesh {
 //   type Err = ();
 //   fn try_from(slot: ComponentSlot) -> Result<Self, Self::Err> {
 //     match slot {
-//       ComponentSlot::Geometry(mesh) => Ok(mesh),
+//       ComponentSlot::Mesh(mesh) => Ok(mesh),
 //       _ => Err(())
 //     }
 //   }
@@ -57,77 +50,112 @@ pub struct Bob {
   pub delta: f32,
 }
 
-impl Into<ComponentSlot> for Bob {
-  fn into(self) -> ComponentSlot {
-    ComponentSlot::Bob(self)
-  }
-}
-
 impl Tick for Bob {
   fn tick(&mut self, parent: &mut GameObject, t: f32) {
     parent.transform.pos += self.direction*((t+self.delta)/self.period).sin();
   }
 }
 
-#[derive(Copy, Clone)]
-pub enum ComponentSlot {
-  Geometry(Mesh),
-  Bob(Bob),      
-  Empty,         
+macro_rules! count_items {
+  ($name:ident) => { 1 };
+  ($first:ident $($rest:ident),*) => {
+    1 + count_items!($($rest),*)
+  }
 }
 
-impl ComponentSlot {
-  pub fn update(&mut self, parent: &mut GameObject, t: f32) {
-    use self::ComponentSlot::*;
-    match *self {
-      Geometry(mut m) => m.tick(parent, t),
-      Bob(mut b)      => b.tick(parent, t),
-      Empty           => ()
-    };
+macro_rules! components {
+  { $($component:ident), * } => {
+    const NUM_COMPONENTS: usize = count_items!($($component )*);
+
+    // The enum storing the components
+    #[derive(Copy, Clone)]
+    pub enum ComponentSlot {
+      $(
+        $component($component),
+        )*
+        Empty, 
+    }
+
+    // Enum used to index the slots
+    #[derive(Copy, Clone)]
+    enum ComponentSlotIndex {
+      $( $component, )*
+    }
+
+    impl ComponentSlot {
+      pub fn update(&mut self, parent: &mut GameObject, t: f32) {
+        use self::ComponentSlot::*;
+        match *self {
+          Mesh(mut m)     => m.tick(parent, t),
+          Bob(mut b)      => b.tick(parent, t),
+          Empty           => ()
+        };
+      }
+    }
+
+    // Conversions for ComponentSlotIndex
+    $(
+      impl From<$component> for ComponentSlot {
+        fn from(x: $component) -> Self {
+          ComponentSlot::$component(x)
+        }
+      }
+      )*
+
+      
+      impl<'a> From<&'a ComponentSlot> for ComponentSlotIndex {
+        fn from(slot: &'a ComponentSlot) -> Self {
+          use self::ComponentSlot::*;
+          match *slot {
+            Mesh(_) => ComponentSlotIndex::Mesh,
+            Bob(_)      => ComponentSlotIndex::Bob,
+            Empty       => unreachable!()
+          }
+        }
+      }
   }
+}
+
+components! {
+  Mesh,
+  Bob
 }
 
 // Component Storage
 #[derive(Copy, Clone)]
-pub struct ComponentStore([ComponentSlot; 2]);
+pub struct ComponentStore([ComponentSlot; NUM_COMPONENTS]);
 
 impl ComponentStore {
   pub fn new() -> Self {
     ComponentStore([ComponentSlot::Empty; 2])
   }
-  
   pub fn add<C: Into<ComponentSlot>>(&mut self, component: C) {
-    use self::ComponentSlot::*;
     let slot = component.into();
-    let idx = match slot {
-      Geometry(_) => 0,
-      Bob(_) =>      1,
-      Empty => unreachable!()
-    };
-    self.0[idx] = slot;
+    let idx = ComponentSlotIndex::from(&slot);
+    self[idx] = slot;
   }
 
   pub fn geometry(&self) -> Option<&Mesh> {
-    match self.0[0] {           // TODO
-      ComponentSlot::Geometry(ref m) => Some(m),
+    match self[ComponentSlotIndex::Mesh] {
+      ComponentSlot::Mesh(ref m) => Some(m),
       _ => None
     }
   }
 }
 
-// use std::ops::{Index, IndexMut};
-// impl Index<ComponentType> for ComponentStore {
-//   type Output = ComponentSlot;
-//   fn index(&self, idx: ComponentType) -> &Self::Output {
-//     &self.0[idx as usize]
-//   }
-// }
+use std::ops::{Index, IndexMut};
+impl Index<ComponentSlotIndex> for ComponentStore {
+  type Output = ComponentSlot;
+  fn index(&self, idx: ComponentSlotIndex) -> &Self::Output {
+    &self.0[idx as usize]
+  }
+}
 
-// impl IndexMut<ComponentType> for ComponentStore {
-//   fn index_mut(&mut self, idx: ComponentType) -> &mut Self::Output {
-//     &mut self.0[idx as usize]
-//   }
-// }
+impl IndexMut<ComponentSlotIndex> for ComponentStore {
+  fn index_mut(&mut self, idx: ComponentSlotIndex) -> &mut Self::Output {
+    &mut self.0[idx as usize]
+  }
+}
 
 // impl Default for ComponentStore {
 //   fn default() -> Self {
@@ -144,4 +172,3 @@ impl<C: Into<ComponentSlot>> From<Vec<C>> for ComponentStore {
     store
   }
 }
-

@@ -40,37 +40,6 @@ fn main() {
 
   let mut objects = vec![terrain];
 
-  // Generate some cubes
-  for n in 0..50 {
-    let geometry = Mesh {
-      geometry: "cube",
-      program:  "basic",
-    };
-
-    let n = n as f32;
-    let bob = Bob {
-      direction: Vector3::new(0.0, 0.10, 0.0),
-      period: 20.0,
-      delta: n*11.0,
-    };
-
-    let scale = 0.1;
-    let transform = Transform {
-      pos: Vector3::new(n*3.0 - 50.0, 0.5, 0.0),
-      rot: na::one(),
-      scale: Vector3::new(1.0, 1.0, 1.0)*scale,
-    };
-
-    let mut components = ComponentStore::new();
-    components.add(geometry);
-    components.add(bob);
-    let obj = GameObject {
-      components: components,
-      transform: transform,
-    };
-    objects.push(obj);
-  };
-  
   let mut t: f32 = 0.0;
   let mut x: f32 = 0.0;
   let mut y: f32 = 0.0;
