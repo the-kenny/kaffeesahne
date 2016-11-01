@@ -1,22 +1,23 @@
 // use std::convert::TryFrom;
 use super::geometry::*;
+use super::TimeDelta;
 use nalgebra as na;
 
-trait Tick {
-  fn tick(&mut self, _parent: &mut GameObject, _t: f32) {}
+pub trait Tick {
+  fn tick(&mut self, _parent: &mut GameObject, _delta: TimeDelta) {}
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct GameObject {
   pub components: ComponentStore,
   pub transform: Transform,
 }
 
 impl GameObject {
-  pub fn update(&mut self, t: f32) {
+  pub fn update(&mut self, delta: TimeDelta) {
     let mut new = self.clone();
     for component in self.components.0.iter_mut() {
-      component.update(&mut new, t);
+      component.update(&mut new, delta);
     }
     self.transform = new.transform;
   }
@@ -43,16 +44,33 @@ impl Tick for Mesh {}
 // }
 
 // Sine Wave Translation
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Bob {
   pub direction: na::Vector3<f32>,
   pub period: f32,
-  pub delta: f32,
+  value: f32,
+}
+
+impl Bob {
+  pub fn new(direction: na::Vector3<f32>, period: f32, delta: f32) -> Self {
+    Bob {
+      direction: direction,
+      period: period,
+      value: delta,
+    }
+  }
 }
 
 impl Tick for Bob {
-  fn tick(&mut self, parent: &mut GameObject, t: f32) {
-    parent.transform.pos += self.direction*((t+self.delta)/self.period).sin();
+  fn tick(&mut self, parent: &mut GameObject, delta: TimeDelta) {
+    // TODO: Handle initial position correctly
+    use std::f32;
+    // TODO: store only values from 0..1 in self.value. Overflows.
+    self.value += delta.as_millis();
+    let val = self.value/self.period;
+    // TODO: Broken without vsync. Need to generate "diffs" instead of
+    // applying the changes directly. Or force a range on `delta`
+    parent.transform.pos += self.direction*(val*2.0*f32::consts::PI).cos();
   }
 }
 
@@ -68,7 +86,7 @@ macro_rules! components {
     const NUM_COMPONENTS: usize = count_items!($($component )*);
 
     // The enum storing the components
-    #[derive(Copy, Clone)]
+    #[derive(Clone, Copy)]
     pub enum ComponentSlot {
       $(
         $component($component),
@@ -77,17 +95,17 @@ macro_rules! components {
     }
 
     // Enum used to index the slots
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     enum ComponentSlotIndex {
       $( $component, )*
     }
 
     impl ComponentSlot {
-      pub fn update(&mut self, parent: &mut GameObject, t: f32) {
+      pub fn update(&mut self, parent: &mut GameObject, delta: TimeDelta) {
         use self::ComponentSlot::*;
         match *self {
-          Mesh(mut m)     => m.tick(parent, t),
-          Bob(mut b)      => b.tick(parent, t),
+          Mesh(ref mut m)     => m.tick(parent, delta),
+          Bob(ref mut b)      => b.tick(parent, delta),
           Empty           => ()
         };
       }
@@ -122,7 +140,7 @@ components! {
 }
 
 // Component Storage
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct ComponentStore([ComponentSlot; NUM_COMPONENTS]);
 
 impl ComponentStore {

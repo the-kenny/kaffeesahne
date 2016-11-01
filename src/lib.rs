@@ -13,6 +13,22 @@ pub use resources::*;
 mod components;
 pub use components::*;
 
+mod world;
+pub use world::*;
+
+#[derive(Debug, Copy, Clone)]
+pub struct TimeDelta(f32);
+
+impl TimeDelta {
+  pub fn as_seconds(&self) -> f32 {
+    self.0 / 1000.0
+  }
+
+  pub fn as_millis(&self) -> f32 {
+    self.0
+  }
+}
+
 use glium as gl;
 impl GameObject {
   pub fn draw<S: gl::Surface>(&self,
