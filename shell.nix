@@ -1,9 +1,14 @@
 { pkgs ? import <nixpkgs> {} }:
- 
-let 
+
+let
   stdenv = pkgs.stdenv;
-  libPath = with pkgs; stdenv.lib.makeLibraryPath [ xlibs.libX11 xlibs.libXcursor xlibs.libXi xlibs.libXxf86vm ];
-in 
+  libPath = with pkgs; with xlibs; stdenv.lib.makeLibraryPath [
+    libX11
+    libXcursor
+    libXi
+    libXxf86vm
+  ];
+in
 stdenv.mkDerivation {
   name = "rust-opengl";
   buildInputs = with pkgs; [ cargo rustc gdb ];
