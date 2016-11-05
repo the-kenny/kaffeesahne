@@ -13,9 +13,6 @@ pub use resources::*;
 mod components;
 pub use components::*;
 
-mod world;
-pub use world::*;
-
 #[derive(Debug, Copy, Clone)]
 pub struct TimeDelta(f32);
 
@@ -26,49 +23,6 @@ impl TimeDelta {
 
   pub fn as_millis(&self) -> f32 {
     self.0
-  }
-}
-
-use glium as gl;
-impl GameObject {
-  pub fn draw<S: gl::Surface>(&self,
-                              target: &mut S,
-                              resources: &ResourceManager,
-                              world_uniforms: &WorldUniforms) {
-    if let Some(ref mesh) = self.components.geometry() {
-      let view_mat       = world_uniforms.view_matrix;
-      let model_mat      = self.transform.as_matrix();
-      let model_view_mat = view_mat * model_mat;
-      let normal_mat     = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
-
-      let uniforms = uniform! {
-        modelMatrix:      model_mat.as_uniform(),
-        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
-        viewMatrix:       view_mat.as_uniform(),
-        modelViewMatrix:  model_view_mat.as_uniform(),
-        normalMatrix:     normal_mat.as_uniform(),
-        lightPosition:    world_uniforms.light_position.as_uniform(),
-      };
-
-      // TODO: Pull out somewhere
-      let params = gl::DrawParameters {
-        depth: gl::Depth {
-          test: gl::draw_parameters::DepthTest::IfLess,
-          write: true,
-          .. Default::default()
-        },
-        .. Default::default()
-      };
-
-      let ref buffers = resources.meshes[&mesh.geometry];
-      let ref program = resources.programs[&mesh.program];
-      target.draw((&buffers.positions, &buffers.normals),
-                  &buffers.indices,
-                  program,
-                  &uniforms,
-                  &params)
-        .unwrap();
-    }
   }
 }
 

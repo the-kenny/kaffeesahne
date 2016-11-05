@@ -1,192 +1,239 @@
-// use std::convert::TryFrom;
-use super::geometry::*;
-use super::TimeDelta;
-use nalgebra as na;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Instant;
 
-pub trait Tick {
-  fn tick(&mut self, _parent: &mut GameObject, _delta: TimeDelta) {}
-}
+use super::*;
 
-#[derive(Clone)]
-pub struct GameObject {
-  pub components: ComponentStore,
+type EntityId = u64;
+
+// TODO: Separate components for position/rotation/scale
+#[derive(Default)]
+pub struct Position {
   pub transform: Transform,
 }
 
-impl GameObject {
-  pub fn update(&mut self, delta: TimeDelta) {
-    let mut new = self.clone();
-    for component in self.components.0.iter_mut() {
-      component.update(&mut new, delta);
-    }
-    self.transform = new.transform;
-  }
-}
-
-// Visible Mesh
-#[derive(Copy, Clone)]
-pub struct Mesh {
+#[derive(Default)]
+pub struct Geometry {
   pub geometry: &'static str,
   pub program:  &'static str,
 }
 
-impl Tick for Mesh {}
-
-// TODO
-// impl TryFrom<ComponentSlot> for Mesh {
-//   type Err = ();
-//   fn try_from(slot: ComponentSlot) -> Result<Self, Self::Err> {
-//     match slot {
-//       ComponentSlot::Mesh(mesh) => Ok(mesh),
-//       _ => Err(())
-//     }
-//   }
-// }
-
-// Sine Wave Translation
-#[derive(Copy, Clone, Debug)]
-pub struct Bob {
-  pub direction: na::Vector3<f32>,
-  pub period: f32,
-  value: f32,
+pub struct Camera {
+  pub target: Point3<f32>,
+  pub tracking: Option<EntityId>,
 }
 
-impl Bob {
-  pub fn new(direction: na::Vector3<f32>, period: f32, delta: f32) -> Self {
-    Bob {
-      direction: direction,
-      period: period,
-      value: delta,
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Component {
+  Position,
+  Geometry,
+  Camera,
+}
+
+pub trait IComponent {
+  fn cname(&self) -> Component;
+}
+
+impl IComponent for Position {
+  fn cname(&self) -> Component {
+    Component::Position
   }
 }
 
-impl Tick for Bob {
-  fn tick(&mut self, parent: &mut GameObject, delta: TimeDelta) {
-    // TODO: Handle initial position correctly
-    use std::f32;
-    // TODO: store only values from 0..1 in self.value. Overflows.
-    self.value += delta.as_millis();
-    let val = self.value/self.period;
-    // TODO: Broken without vsync. Need to generate "diffs" instead of
-    // applying the changes directly. Or force a range on `delta`
-    parent.transform.pos += self.direction*(val*2.0*f32::consts::PI).cos();
+impl IComponent for Geometry {
+  fn cname(&self) -> Component {
+    Component::Geometry
   }
 }
 
-macro_rules! count_items {
-  ($name:ident) => { 1 };
-  ($first:ident $($rest:ident),*) => {
-    1 + count_items!($($rest),*)
+
+#[derive(Default)]
+pub struct EntityManager {
+  pub entities:       BTreeSet<EntityId>,
+  highest_id:     EntityId,
+
+  pub positions:  BTreeMap<EntityId, Position>,
+  pub geometries: BTreeMap<EntityId, Geometry>,
+  pub cameras:    BTreeMap<EntityId, Camera>,
+}
+
+impl EntityManager {
+  pub fn entities(&self, component: Component) -> Vec<EntityId> {
+    use self::Component::*;
+    match component {
+      Position => self.positions.keys().cloned().collect(),
+      Geometry => self.geometries.keys().cloned().collect(),
+      Camera   => self.cameras.keys().cloned().collect(),
+    }
+  }
+
+  pub fn new_entity(&mut self) -> EntityId {
+    self.highest_id += 1;
+    self.entities.insert(self.highest_id);
+    self.highest_id
+  }
+
+  pub fn add_geometry(&mut self, entity: EntityId, g: Geometry) {
+    self.geometries.insert(entity, g);
+  }
+
+  pub fn add_position(&mut self, entity: EntityId, p: Position) {
+    self.positions.insert(entity, p);
+  }
+
+  pub fn add_camera(&mut self, entity: EntityId, camera: Camera) {
+    self.cameras.insert(entity, camera);
   }
 }
 
-macro_rules! components {
-  { $($component:ident), * } => {
-    const NUM_COMPONENTS: usize = count_items!($($component )*);
+#[derive(Default)]
+struct RenderSystem;
 
-    // The enum storing the components
-    #[derive(Clone, Copy)]
-    pub enum ComponentSlot {
-      $(
-        $component($component),
-        )*
-        Empty, 
-    }
+use glium as gl;
+impl RenderSystem {
+  fn render<S: gl::Surface>(&self,
+                            manager: &EntityManager,
+                            surface: &mut S,
+                            // TODO: Pass via `World`
+                            resources: &ResourceManager,
+                            world_uniforms: &WorldUniforms) {
+    for entity in manager.entities.iter() {
+      if let (Some(g), Some(p)) = (manager.geometries.get(entity),
+                                   manager.positions.get(entity)) {
+        let view_mat       = world_uniforms.view_matrix;
+        let model_mat      = p.transform.as_matrix();
+        let model_view_mat = view_mat * model_mat;
+        let normal_mat     = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
-    // Enum used to index the slots
-    #[derive(Clone)]
-    enum ComponentSlotIndex {
-      $( $component, )*
-    }
-
-    impl ComponentSlot {
-      pub fn update(&mut self, parent: &mut GameObject, delta: TimeDelta) {
-        use self::ComponentSlot::*;
-        match *self {
-          Mesh(ref mut m)     => m.tick(parent, delta),
-          Bob(ref mut b)      => b.tick(parent, delta),
-          Empty           => ()
+        let uniforms = uniform! {
+          modelMatrix:      model_mat.as_uniform(),
+          projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
+          viewMatrix:       view_mat.as_uniform(),
+          modelViewMatrix:  model_view_mat.as_uniform(),
+          normalMatrix:     normal_mat.as_uniform(),
+          lightPosition:    world_uniforms.light_position.as_uniform(),
         };
+
+        // TODO: Pull out somewhere
+        let params = gl::DrawParameters {
+          depth: gl::Depth {
+            test: gl::draw_parameters::DepthTest::IfLess,
+            write: true,
+            .. Default::default()
+          },
+          .. Default::default()
+        };
+
+        let ref buffers = resources.meshes[&g.geometry];
+        let ref program = resources.programs[&g.program];
+        surface.draw((&buffers.positions, &buffers.normals),
+                     &buffers.indices,
+                     program,
+                     &uniforms,
+                     &params)
+          .unwrap();
       }
     }
-
-    // Conversions for ComponentSlotIndex
-    $(
-      impl From<$component> for ComponentSlot {
-        fn from(x: $component) -> Self {
-          ComponentSlot::$component(x)
-        }
-      }
-      )*
-
-      
-      impl<'a> From<&'a ComponentSlot> for ComponentSlotIndex {
-        fn from(slot: &'a ComponentSlot) -> Self {
-          use self::ComponentSlot::*;
-          match *slot {
-            Mesh(_) => ComponentSlotIndex::Mesh,
-            Bob(_)      => ComponentSlotIndex::Bob,
-            Empty       => unreachable!()
-          }
-        }
-      }
   }
 }
 
-components! {
-  Mesh,
-  Bob
+#[derive(Default)]
+struct VelocitySystem;
+impl VelocitySystem {
+  // TODO: Move to trait
+  fn run(&self, manager: &mut EntityManager, _delta: TimeDelta) {
+    for entity in manager.entities.iter() {
+      // Nop
+      // TODO
+    }
+  }
 }
 
-// Component Storage
-#[derive(Clone)]
-pub struct ComponentStore([ComponentSlot; NUM_COMPONENTS]);
+struct CameraSystem;
+impl CameraSystem {
+  fn run(&self, manager: &mut EntityManager, _delta: TimeDelta) {
+    for camera in manager.entities(Component::Camera) {
+      let camera = manager.cameras.get_mut(&camera).unwrap();
+      if let Some(target) = camera.tracking {
+        camera.target = manager.positions[&target].transform.pos.to_point();
+      }
+    }
+  }
+}
 
-impl ComponentStore {
+pub struct World {
+  pub entities: EntityManager,
+  velocity_system: VelocitySystem,
+  camera_system: CameraSystem,
+  render_system: RenderSystem,
+  
+  time: Instant,
+}
+
+impl World {
   pub fn new() -> Self {
-    ComponentStore([ComponentSlot::Empty; 2])
-  }
-  pub fn add<C: Into<ComponentSlot>>(&mut self, component: C) {
-    let slot = component.into();
-    let idx = ComponentSlotIndex::from(&slot);
-    self[idx] = slot;
-  }
-
-  pub fn geometry(&self) -> Option<&Mesh> {
-    match self[ComponentSlotIndex::Mesh] {
-      ComponentSlot::Mesh(ref m) => Some(m),
-      _ => None
+    World {
+      entities: EntityManager::default(),
+      velocity_system: VelocitySystem,
+      camera_system: CameraSystem,
+      render_system: RenderSystem,
+      time: Instant::now(),
     }
   }
-}
 
-use std::ops::{Index, IndexMut};
-impl Index<ComponentSlotIndex> for ComponentStore {
-  type Output = ComponentSlot;
-  fn index(&self, idx: ComponentSlotIndex) -> &Self::Output {
-    &self.0[idx as usize]
+  fn current_camera(&self) -> Option<EntityId> {
+     self.entities.entities(Component::Camera).into_iter().next()
   }
-}
 
-impl IndexMut<ComponentSlotIndex> for ComponentStore {
-  fn index_mut(&mut self, idx: ComponentSlotIndex) -> &mut Self::Output {
-    &mut self.0[idx as usize]
-  }
-}
+  fn uniforms(&self, (width,height): (u32, u32)) -> WorldUniforms {
+    let camera = self.current_camera()
+      .expect("Scene doesn't contain a camera!");
+    let light = Vector3::<f32>::new(-3.0, 1.0, 3.0);
 
-impl Default for ComponentStore {
-  fn default() -> Self {
-    Self::new()
-  }
-}
+    let view_mat: Matrix4<f32> = na::to_homogeneous(
+      &Isometry3::look_at_rh(&self.entities.positions[&camera].transform.pos.as_point(),
+                             &self.entities.cameras[&camera].target,
+                             &Vector3::new(0.0, 1.0, 0.0)));
 
-impl<C: Into<ComponentSlot>> From<Vec<C>> for ComponentStore {
-  fn from(other: Vec<C>) -> Self {
-    let mut store = Self::new();
-    for c in other.into_iter() {
-      store.add(c);
+    let projection_mat: Matrix4<f32> = {
+      let ratio    = width as f32 / height as f32;
+      let fov: f32 = 3.141592 / 3.0;
+      let zfar     = 1024.0;
+      let znear    = 0.1;
+
+      PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix()
+    };
+
+    WorldUniforms {
+      projection_matrix: projection_mat,
+      view_matrix:       view_mat,
+      light_position:    Point3::new(light.x, light.y, light.z),
     }
-    store
+  }
+
+  pub fn update(&mut self) {
+    let now = Instant::now();
+    let delta: TimeDelta = {
+      let delta = now - self.time;
+      TimeDelta(delta.as_secs() as f32 * 1000.0
+                +
+                delta.subsec_nanos() as f32 / 1000000.0)
+    };
+
+    self.velocity_system.run(&mut self.entities, delta);
+    self.camera_system.run(&mut self.entities, delta);
+    
+    self.time = now;
+  }
+
+  pub fn draw<S: gl::Surface>(&self,
+                              surface: &mut S,
+                              // TODO: Pass via `World`
+                              resources: &ResourceManager) {
+    let surface_size = surface.get_dimensions();
+    let world_uniforms = self.uniforms(surface_size); 
+    self.render_system.render(&self.entities,
+                              surface,
+                              resources,
+                              &world_uniforms);
   }
 }
