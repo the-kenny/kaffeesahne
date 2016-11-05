@@ -1,7 +1,7 @@
 use nalgebra as na;
 use nalgebra::{Vector3, UnitQuaternion, Matrix4};
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Transform {
   pub pos:   Vector3<f32>,
   pub rot:   UnitQuaternion<f32>,

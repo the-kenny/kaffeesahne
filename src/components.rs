@@ -5,53 +5,56 @@ use super::*;
 
 type EntityId = u64;
 
-// TODO: Separate components for position/rotation/scale
-#[derive(Default)]
-pub struct Position {
-  pub transform: Transform,
-}
+#[derive(Debug, Copy, Clone)]
+pub struct Position(pub Vector3<f32>);
 
-#[derive(Default)]
+#[derive(Debug, Copy, Clone)]
+pub struct Scale(pub Vector3<f32>);
+
+#[derive(Debug, Copy, Clone)]
 pub struct Geometry {
   pub geometry: &'static str,
   pub program:  &'static str,
 }
 
+#[derive(Debug)]
 pub struct Camera {
   pub target: Point3<f32>,
   pub tracking: Option<EntityId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Component {
-  Position,
-  Geometry,
-  Camera,
 }
 
 pub trait IComponent {
   fn cname(&self) -> Component;
 }
 
-impl IComponent for Position {
-  fn cname(&self) -> Component {
-    Component::Position
+macro_rules! components {
+  {$($name:ident, )*} => {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Component {
+      $($name, )*
+    }
+
+    $(impl IComponent for $name {
+      fn cname(&self) -> Component { Component::$name }
+    })*
   }
 }
 
-impl IComponent for Geometry {
-  fn cname(&self) -> Component {
-    Component::Geometry
-  }
+components! {
+  Position,
+  Scale,
+  Geometry,
+  Camera,
 }
 
 
 #[derive(Default)]
 pub struct EntityManager {
-  pub entities:       BTreeSet<EntityId>,
+  pub entities:   BTreeSet<EntityId>,
   highest_id:     EntityId,
 
   pub positions:  BTreeMap<EntityId, Position>,
+  pub scales:     BTreeMap<EntityId, Scale>,
   pub geometries: BTreeMap<EntityId, Geometry>,
   pub cameras:    BTreeMap<EntityId, Camera>,
 }
@@ -61,6 +64,7 @@ impl EntityManager {
     use self::Component::*;
     match component {
       Position => self.positions.keys().cloned().collect(),
+      Scale    => self.scales.keys().cloned().collect(),
       Geometry => self.geometries.keys().cloned().collect(),
       Camera   => self.cameras.keys().cloned().collect(),
     }
@@ -76,12 +80,16 @@ impl EntityManager {
     self.geometries.insert(entity, g);
   }
 
-  pub fn add_position(&mut self, entity: EntityId, p: Position) {
+  pub fn set_position(&mut self, entity: EntityId, p: Position) {
     self.positions.insert(entity, p);
   }
 
   pub fn add_camera(&mut self, entity: EntityId, camera: Camera) {
     self.cameras.insert(entity, camera);
+  }
+
+  pub fn set_scale(&mut self, entity: EntityId, scale: Scale) {
+    self.scales.insert(entity, scale);
   }
 }
 
@@ -99,16 +107,24 @@ impl RenderSystem {
     for entity in manager.entities.iter() {
       if let (Some(g), Some(p)) = (manager.geometries.get(entity),
                                    manager.positions.get(entity)) {
-        let view_mat       = world_uniforms.view_matrix;
-        let model_mat      = p.transform.as_matrix();
-        let model_view_mat = view_mat * model_mat;
-        let normal_mat     = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
+        let model_mat = {
+          let rot: na::Quaternion<f32> = na::one();
+          let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
+          (Transform {
+            pos: p.0,
+            rot: UnitQuaternion::new(&rot),
+            scale: sca.0,
+          }).as_matrix()
+        };
+
+        let view_mat = world_uniforms.view_matrix;
+        let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
         let uniforms = uniform! {
           modelMatrix:      model_mat.as_uniform(),
           projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
           viewMatrix:       view_mat.as_uniform(),
-          modelViewMatrix:  model_view_mat.as_uniform(),
+          modelViewMatrix:  (view_mat * model_mat).as_uniform(),
           normalMatrix:     normal_mat.as_uniform(),
           lightPosition:    world_uniforms.light_position.as_uniform(),
         };
@@ -154,7 +170,7 @@ impl CameraSystem {
     for camera in manager.entities(Component::Camera) {
       let camera = manager.cameras.get_mut(&camera).unwrap();
       if let Some(target) = camera.tracking {
-        camera.target = manager.positions[&target].transform.pos.to_point();
+        camera.target = manager.positions[&target].0.to_point();
       }
     }
   }
@@ -190,7 +206,7 @@ impl World {
     let light = Vector3::<f32>::new(-3.0, 1.0, 3.0);
 
     let view_mat: Matrix4<f32> = na::to_homogeneous(
-      &Isometry3::look_at_rh(&self.entities.positions[&camera].transform.pos.as_point(),
+      &Isometry3::look_at_rh(&self.entities.positions[&camera].0.as_point(),
                              &self.entities.cameras[&camera].target,
                              &Vector3::new(0.0, 1.0, 0.0)));
 

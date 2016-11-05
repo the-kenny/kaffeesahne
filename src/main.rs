@@ -30,14 +30,9 @@ fn main() {
     world.entities.add_geometry(terrain, geometry);
 
     let scale = 0.5;
-    let transform = Position {
-      transform: Transform {
-        pos: Vector3::new(0.0, -0.5, 0.0),
-        rot: na::one(),
-        scale: Vector3::new(1.0, 1.0, 1.0)*scale,
-      }
-    };
-    world.entities.add_position(terrain, transform);
+    let position = Position(Vector3::new(0.0, 0.0, 0.0));
+    world.entities.set_position(terrain, position);
+    world.entities.set_scale(terrain, Scale(na::one::<na::Vector3<f32>>()*scale));
   }
 
   let camera = world.entities.new_entity();
@@ -45,13 +40,7 @@ fn main() {
     target: Point3::new(0.0, 0.0, 0.0),
     tracking: None,
   });
-  world.entities.add_position(camera, Position {
-      transform: Transform {
-        pos: Vector3::new(0.0, 1.5, 3.0),
-        rot: na::one(),
-        scale: na::one(),
-      }
-    });
+  world.entities.set_position(camera, Position(Vector3::new(0.0, 1.5, 3.0)));
 
   loop {
     let mut target = display.draw();
