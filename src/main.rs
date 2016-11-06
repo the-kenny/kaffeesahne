@@ -1,13 +1,14 @@
 #[macro_use] extern crate glium;
 extern crate image;
-extern crate opengl;
+extern crate kaffeesahne;
 
 use glium as gl;
-use opengl::*;
+use kaffeesahne::*;
 
 fn main() {
   use glium::{DisplayBuild, Surface};
   let display = gl::glutin::WindowBuilder::new()
+    // .with_multisampling(8)
     .with_depth_buffer(24)
     .build_glium().unwrap();
 

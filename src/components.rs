@@ -12,6 +12,12 @@ pub struct Position(pub Vector3<f32>);
 pub struct Scale(pub Vector3<f32>);
 
 #[derive(Debug, Copy, Clone)]
+pub struct Rotation {
+  pub axis: Vector3<f32>,
+  pub angle: f32,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub struct Geometry {
   pub geometry: &'static str,
   pub program:  &'static str,
@@ -43,6 +49,7 @@ macro_rules! components {
 components! {
   Position,
   Scale,
+  Rotation,
   Geometry,
   Camera,
 }
@@ -55,6 +62,7 @@ pub struct EntityManager {
 
   pub positions:  BTreeMap<EntityId, Position>,
   pub scales:     BTreeMap<EntityId, Scale>,
+  pub rotations:  BTreeMap<EntityId, Rotation>,
   pub geometries: BTreeMap<EntityId, Geometry>,
   pub cameras:    BTreeMap<EntityId, Camera>,
 }
@@ -65,6 +73,7 @@ impl EntityManager {
     match component {
       Position => self.positions.keys().cloned().collect(),
       Scale    => self.scales.keys().cloned().collect(),
+      Rotation => self.rotations.keys().cloned().collect(),
       Geometry => self.geometries.keys().cloned().collect(),
       Camera   => self.cameras.keys().cloned().collect(),
     }
@@ -91,6 +100,11 @@ impl EntityManager {
   pub fn set_scale(&mut self, entity: EntityId, scale: Scale) {
     self.scales.insert(entity, scale);
   }
+
+  pub fn set_rotation(&mut self, entity: EntityId, rot: Rotation) {
+    self.rotations.insert(entity, rot);
+  }
+
 }
 
 #[derive(Default)]
@@ -108,11 +122,13 @@ impl RenderSystem {
       if let (Some(g), Some(p)) = (manager.geometries.get(entity),
                                    manager.positions.get(entity)) {
         let model_mat = {
-          let rot: na::Quaternion<f32> = na::one();
+          let rot = manager.rotations.get(entity)
+            .map(|rot| na::UnitQuaternion::from_axisangle(na::Unit::new(&rot.axis), rot.angle))
+            .unwrap_or(na::one());
           let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
           (Transform {
             pos: p.0,
-            rot: UnitQuaternion::new(&rot),
+            rot: rot,
             scale: sca.0,
           }).as_matrix()
         };
@@ -157,10 +173,8 @@ struct VelocitySystem;
 impl VelocitySystem {
   // TODO: Move to trait
   fn run(&self, manager: &mut EntityManager, _delta: TimeDelta) {
-    for entity in manager.entities.iter() {
-      // Nop
-      // TODO
-    }
+    // Nop
+    // TODO
   }
 }
 
@@ -237,7 +251,7 @@ impl World {
 
     self.velocity_system.run(&mut self.entities, delta);
     self.camera_system.run(&mut self.entities, delta);
-    
+
     self.time = now;
   }
 
@@ -253,3 +267,4 @@ impl World {
                               &world_uniforms);
   }
 }
+
