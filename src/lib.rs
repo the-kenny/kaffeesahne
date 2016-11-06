@@ -38,8 +38,9 @@ pub fn matrix3_from_matrix4<T: Copy>(m: &Matrix4<T>) -> Matrix3<T> {
                m[(0,2)], m[(1,2)], m[(2,2)])
 }
 
-pub fn quat_rotate<T: Copy+na::BaseFloat>(angle: T, axis: &Vector3<T>) -> UnitQuaternion<T> {
-  UnitQuaternion::from_axisangle(na::Unit::new(axis), angle)
+pub fn quat_rotate<T: Copy+na::BaseFloat>(angle: T, axis: na::Unit<na::Vector3<T>>)
+                                          -> na::UnitQuaternion<T> {
+  UnitQuaternion::from_axisangle(axis, angle)
 }
 
 pub trait AsUniform<T>

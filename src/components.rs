@@ -5,6 +5,8 @@ use super::*;
 
 type EntityId = u64;
 
+// Basic Object Attributes
+
 #[derive(Debug, Copy, Clone)]
 pub struct Position(pub Vector3<f32>);
 
@@ -12,10 +14,15 @@ pub struct Position(pub Vector3<f32>);
 pub struct Scale(pub Vector3<f32>);
 
 #[derive(Debug, Copy, Clone)]
-pub struct Rotation {
-  pub axis: Vector3<f32>,
-  pub angle: f32,
+pub struct Rotation(pub na::UnitQuaternion<f32>);
+
+#[derive(Debug, Copy, Clone)]
+pub struct Velocity {
+  pub angular: Rotation,
+  pub linear:  Vector3<f32>
 }
+
+// More Complex Object Attributes
 
 #[derive(Debug, Copy, Clone)]
 pub struct Geometry {
@@ -50,6 +57,7 @@ components! {
   Position,
   Scale,
   Rotation,
+  Velocity,
   Geometry,
   Camera,
 }
@@ -63,6 +71,7 @@ pub struct EntityManager {
   pub positions:  BTreeMap<EntityId, Position>,
   pub scales:     BTreeMap<EntityId, Scale>,
   pub rotations:  BTreeMap<EntityId, Rotation>,
+  pub velocities: BTreeMap<EntityId, Velocity>,
   pub geometries: BTreeMap<EntityId, Geometry>,
   pub cameras:    BTreeMap<EntityId, Camera>,
 }
@@ -74,6 +83,7 @@ impl EntityManager {
       Position => self.positions.keys().cloned().collect(),
       Scale    => self.scales.keys().cloned().collect(),
       Rotation => self.rotations.keys().cloned().collect(),
+      Velocity => self.velocities.keys().cloned().collect(),
       Geometry => self.geometries.keys().cloned().collect(),
       Camera   => self.cameras.keys().cloned().collect(),
     }
@@ -104,7 +114,6 @@ impl EntityManager {
   pub fn set_rotation(&mut self, entity: EntityId, rot: Rotation) {
     self.rotations.insert(entity, rot);
   }
-
 }
 
 #[derive(Default)]
@@ -122,13 +131,11 @@ impl RenderSystem {
       if let (Some(g), Some(p)) = (manager.geometries.get(entity),
                                    manager.positions.get(entity)) {
         let model_mat = {
-          let rot = manager.rotations.get(entity)
-            .map(|rot| na::UnitQuaternion::from_axisangle(na::Unit::new(&rot.axis), rot.angle))
-            .unwrap_or(na::one());
+          let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
           let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
           (Transform {
             pos: p.0,
-            rot: rot,
+            rot: rot.0,
             scale: sca.0,
           }).as_matrix()
         };
@@ -172,9 +179,28 @@ impl RenderSystem {
 struct VelocitySystem;
 impl VelocitySystem {
   // TODO: Move to trait
-  fn run(&self, manager: &mut EntityManager, _delta: TimeDelta) {
-    // Nop
-    // TODO
+  fn run(&self, manager: &mut EntityManager, delta: TimeDelta) {
+    for entity in manager.entities(Component::Velocity) {
+      if let Some(velocity) = manager.velocities.get(&entity) {
+        let delta = delta.as_seconds();
+        // Update component.position
+        manager.positions.get_mut(&entity).unwrap().0 += velocity.linear * delta;
+
+        // Update component.rotation
+        let angle = velocity.angular.0.angle()*delta;
+        let axis  = velocity.angular.0.axis().unwrap();
+
+        use std::collections::btree_map::Entry::*;
+        match manager.rotations.entry(entity) {
+          Vacant(entry)   => {
+            entry.insert(Rotation(quat_rotate(angle, axis)));
+          },
+          Occupied(entry) => {
+            entry.into_mut().0 *= UnitQuaternion::from_axisangle(axis, angle);
+          },
+        };
+      }
+    }
   }
 }
 
@@ -195,7 +221,7 @@ pub struct World {
   velocity_system: VelocitySystem,
   camera_system: CameraSystem,
   render_system: RenderSystem,
-  
+
   time: Instant,
 }
 
@@ -260,11 +286,10 @@ impl World {
                               // TODO: Pass via `World`
                               resources: &ResourceManager) {
     let surface_size = surface.get_dimensions();
-    let world_uniforms = self.uniforms(surface_size); 
+    let world_uniforms = self.uniforms(surface_size);
     self.render_system.render(&self.entities,
                               surface,
                               resources,
                               &world_uniforms);
   }
 }
-
