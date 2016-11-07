@@ -250,6 +250,7 @@ impl World {
                              &self.entities.cameras[&camera].target,
                              &Vector3::new(0.0, 1.0, 0.0)));
 
+    // Something is wrong hree - perspective doesn't look right
     let projection_mat: Matrix4<f32> = {
       let ratio    = width as f32 / height as f32;
       let fov: f32 = 3.141592 / 3.0;
