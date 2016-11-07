@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
+use glium as gl;
 
 use super::*;
 
@@ -30,6 +31,9 @@ pub struct Geometry {
   pub program:  &'static str,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Pickable(pub u32);
+
 #[derive(Debug)]
 pub struct Camera {
   pub target: Point3<f32>,
@@ -59,9 +63,9 @@ components! {
   Rotation,
   Velocity,
   Geometry,
+  Pickable,
   Camera,
 }
-
 
 #[derive(Default)]
 pub struct EntityManager {
@@ -73,6 +77,7 @@ pub struct EntityManager {
   pub rotations:  BTreeMap<EntityId, Rotation>,
   pub velocities: BTreeMap<EntityId, Velocity>,
   pub geometries: BTreeMap<EntityId, Geometry>,
+  pub pickables:  BTreeMap<EntityId, Pickable>,
   pub cameras:    BTreeMap<EntityId, Camera>,
 }
 
@@ -85,6 +90,7 @@ impl EntityManager {
       Rotation => self.rotations.keys().cloned().collect(),
       Velocity => self.velocities.keys().cloned().collect(),
       Geometry => self.geometries.keys().cloned().collect(),
+      Pickable => self.pickables.keys().cloned().collect(),
       Camera   => self.cameras.keys().cloned().collect(),
     }
   }
@@ -114,19 +120,48 @@ impl EntityManager {
   pub fn set_rotation(&mut self, entity: EntityId, rot: Rotation) {
     self.rotations.insert(entity, rot);
   }
+
+  pub fn set_pickable(&mut self, entity: EntityId, enable: bool) {
+    assert!(entity <= u32::max_value() as u64);
+    if enable {
+      self.pickables.insert(entity, Pickable(entity as u32));
+    } else {
+      self.pickables.remove(&entity);
+    }
+  }
 }
 
-#[derive(Default)]
-struct RenderSystem;
+pub struct RenderSystem {
+  picking_target: (gl::texture::UnsignedTexture2d,
+                   gl::framebuffer::DepthRenderBuffer),
+  picking_pbo:    gl::texture::pixel_buffer::PixelBuffer<u32>,
+  picking_size: (u32, u32),
+}
 
-use glium as gl;
 impl RenderSystem {
+  fn new<F: gl::backend::Facade+Sized>(display: &F) -> Self {
+    let size = (800,600);       // TODO
+    let color = gl::texture::UnsignedTexture2d::empty(display, size.0, size.1).unwrap();
+    let depth = gl::framebuffer::DepthRenderBuffer::new(display,
+                                                        gl::texture::DepthFormat::F32,
+                                                        size.0, size.1).unwrap();
+
+    RenderSystem {
+      picking_target: (color, depth),
+      picking_pbo: gl::texture::pixel_buffer::PixelBuffer::new_empty(display, 1),
+      picking_size: size,
+    }
+  }
+
   fn render<S: gl::Surface>(&self,
                             manager: &EntityManager,
                             surface: &mut S,
                             // TODO: Pass via `World`
                             resources: &ResourceManager,
                             world_uniforms: &WorldUniforms) {
+    // TODO Set clear_color in `World` or `RenderSystem`
+    surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
     for entity in manager.entities.iter() {
       if let (Some(g), Some(p)) = (manager.geometries.get(entity),
                                    manager.positions.get(entity)) {
@@ -173,6 +208,92 @@ impl RenderSystem {
       }
     }
   }
+
+  // TODO: Remove the loop inside and call it from `render`
+  pub fn render_pickables(&self,
+                          manager: &EntityManager,
+                          // TODO: Pass via `World`
+                          resources: &ResourceManager,
+                          world_uniforms: &WorldUniforms) {
+    use glium::Surface;
+    let mut surface = {
+      let facade = self.picking_pbo.get_context();
+      gl::framebuffer::SimpleFrameBuffer::with_depth_buffer(facade,
+                                                            &self.picking_target.0,
+                                                            &self.picking_target.1)
+        .unwrap()
+    };
+
+    surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
+    let picking_program = &resources.programs["picking"];
+
+    for ref entity in manager.entities(Component::Pickable) {
+      let Pickable(id) = manager.pickables[entity];
+      if let (Some(g), Some(p)) = (manager.geometries.get(entity), manager.positions.get(entity)) {
+        // TODO: Duplication
+        let model_mat = {
+          let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
+          let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
+          (Transform {
+            pos: p.0,
+            rot: rot.0,
+            scale: sca.0,
+          }).as_matrix()
+        };
+
+        let view_mat = world_uniforms.view_matrix;
+
+        let uniforms = uniform! {
+          picking_id:       id,
+          modelMatrix:      model_mat.as_uniform(),
+          projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
+          viewMatrix:       view_mat.as_uniform(),
+          modelViewMatrix:  (view_mat * model_mat).as_uniform(),
+        };
+
+        // TODO: Pull out somewhere
+        let params = gl::DrawParameters {
+          depth: gl::Depth {
+            test: gl::draw_parameters::DepthTest::IfLess,
+            write: true,
+            .. Default::default()
+          },
+          .. Default::default()
+        };
+
+        let ref buffers = resources.meshes[&g.geometry];
+        surface.draw(&buffers.positions,
+                     &buffers.indices,
+                     &picking_program,
+                     &uniforms,
+                     &params)
+          .unwrap();
+      } else {
+        panic!("Got Renderable without Position/Geometry");
+      }
+    }
+  }
+
+  pub fn pick(&self, dimensions: (u32,u32), position: (u32, u32)) -> Option<EntityId> { // TODO
+    let x = (self.picking_size.0 as f32 / dimensions.0 as f32) * position.0 as f32;
+    let y = (self.picking_size.1 as f32 / dimensions.1 as f32) * position.1 as f32;
+    let rect = gl::Rect {
+      left: x as u32,
+      bottom: self.picking_size.1 - y as u32 - 1,
+      width: 1,
+      height: 1
+    };
+    // Copy the target pixel into our picking_vbo (which stores just one pixel)
+    self.picking_target.0.main_level()
+      .first_layer()
+      .into_image(None).unwrap()
+      .raw_read_to_pixel_buffer(&rect, &self.picking_pbo);
+    // Copy the picking_vbo into main memory and read its value
+    self.picking_pbo.read().ok().and_then(|px| {
+      if px[0] > 0 { Some(px[0] as u64) } else { None }
+    })
+  }
 }
 
 #[derive(Default)]
@@ -192,7 +313,7 @@ impl VelocitySystem {
 
         use std::collections::btree_map::Entry::*;
         match manager.rotations.entry(entity) {
-          Vacant(entry)   => {
+          Vacant(entry) => {
             entry.insert(Rotation(quat_rotate(angle, axis)));
           },
           Occupied(entry) => {
@@ -220,18 +341,20 @@ pub struct World {
   pub entities: EntityManager,
   velocity_system: VelocitySystem,
   camera_system: CameraSystem,
-  render_system: RenderSystem,
+  pub render_system: RenderSystem, // TODO
 
   time: Instant,
 }
 
 impl World {
-  pub fn new() -> Self {
+  pub fn new<F: gl::backend::Facade+Sized>(display: &F) -> Self {
+    let render_system = RenderSystem::new(display);
+
     World {
       entities: EntityManager::default(),
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
-      render_system: RenderSystem,
+      render_system: render_system,
       time: Instant::now(),
     }
   }
@@ -282,12 +405,18 @@ impl World {
     self.time = now;
   }
 
-  pub fn draw<S: gl::Surface>(&self,
-                              surface: &mut S,
-                              // TODO: Pass via `World`
-                              resources: &ResourceManager) {
+  pub fn draw<S>(&self,
+                 surface: &mut S,
+                 // TODO: Pass via `World`
+                 resources: &ResourceManager)
+  where S: gl::Surface {
     let surface_size = surface.get_dimensions();
     let world_uniforms = self.uniforms(surface_size);
+
+    self.render_system.render_pickables(&self.entities,
+                                        resources,
+                                        &world_uniforms);
+
     self.render_system.render(&self.entities,
                               surface,
                               resources,
