@@ -5,11 +5,11 @@ extern crate kaffeesahne;
 use std::f32::consts;
 use glium as gl;
 use kaffeesahne::*;
+use std::time::{Duration,Instant};
 
 fn main() {
   use glium::{DisplayBuild, Surface};
   let display = gl::glutin::WindowBuilder::new()
-    // .with_multisampling(8)
     .with_depth_buffer(24)
     .build_glium().unwrap();
 
@@ -43,7 +43,7 @@ fn main() {
     world.entities.set_pickable(terrain, true);
     world.entities.velocities.insert(terrain, Velocity {
       linear: Vector3::new(0.0, 0.0, 0.0),
-      angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
+      angular: Rotation(quat_rotate(2.0*consts::PI/4.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
     });
   }
 
@@ -54,21 +54,34 @@ fn main() {
   });
   world.entities.set_position(camera, Position(Vector3::new(0.0, 1.5, 3.0)));
 
+  let MS_PER_UPDATE = Duration::new(0, 10000000/60);
+  let mut previous = Instant::now();
+  let mut lag = Duration::new(0, 00);
+
   loop {
+    let now = Instant::now();
+    lag += now - previous;
+    previous = now;
+
+    while lag >= MS_PER_UPDATE {
+      world.update(MS_PER_UPDATE.into());
+      lag -= MS_PER_UPDATE;
+    }
+
     let mut target = display.draw();
     let dimensions = target.get_dimensions();
-
-    world.update();
     world.draw(&mut target, &resources);
 
     target.finish().unwrap();
 
+    // TODO: How to handle these events? Picking with vsync still fucks up
     for ev in display.poll_events() {
       use glium::glutin::*;
       match ev {
         Event::Closed => return,
         Event::MouseMoved(x,y) => {
-          println!("{:?}", world.render_system.pick(dimensions, (x as u32,y as u32)));
+          println!("{:?}", world.render_system.pick);
+          world.render_system.pick(dimensions, (x as u32, y as u32)) // 
         }
         _ => (),
       }

@@ -3,6 +3,7 @@ pub extern crate nalgebra;
 
 pub use nalgebra as na;
 pub use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
+use std::time::Duration;
 
 mod geometry;
 pub use geometry::*;
@@ -14,15 +15,23 @@ mod components;
 pub use components::*;
 
 #[derive(Debug, Copy, Clone)]
-pub struct TimeDelta(f32);
+pub struct Millis(pub f32);
 
-impl TimeDelta {
+impl Millis {
   pub fn as_seconds(&self) -> f32 {
     self.0 / 1000.0
   }
 
   pub fn as_millis(&self) -> f32 {
     self.0
+  }
+}
+
+impl From<Duration> for Millis {
+  fn from(dur: Duration) -> Self {
+    Millis(dur.as_secs() as f32 / 1000.0
+           +
+           dur.subsec_nanos() as f32 / 1000000.0)
   }
 }
 
