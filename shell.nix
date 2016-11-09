@@ -11,7 +11,7 @@ let
 in
 stdenv.mkDerivation {
   name = "rust-opengl";
-  buildInputs = with pkgs; [ cargo rustc gdb ];
+  buildInputs = with pkgs; [ cargo rustc gdb linuxPackages.perf ];
   shellHook = "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libPath}";
 
   RUST_BACKTRACE=1;

@@ -1,9 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use glium as gl;
 
 use super::*;
 
 type EntityId = u64;
+type EntityMap<K,V> = BTreeMap<K,V>;
 
 // Basic Object Attributes
 
@@ -71,13 +72,13 @@ pub struct EntityManager {
   pub entities:   BTreeSet<EntityId>,
   highest_id:     EntityId,
 
-  pub positions:  BTreeMap<EntityId, Position>,
-  pub scales:     BTreeMap<EntityId, Scale>,
-  pub rotations:  BTreeMap<EntityId, Rotation>,
-  pub velocities: BTreeMap<EntityId, Velocity>,
-  pub geometries: BTreeMap<EntityId, Geometry>,
-  pub pickables:  BTreeMap<EntityId, Pickable>,
-  pub cameras:    BTreeMap<EntityId, Camera>,
+  pub positions:  EntityMap<EntityId, Position>,
+  pub scales:     EntityMap<EntityId, Scale>,
+  pub rotations:  EntityMap<EntityId, Rotation>,
+  pub velocities: EntityMap<EntityId, Velocity>,
+  pub geometries: EntityMap<EntityId, Geometry>,
+  pub pickables:  EntityMap<EntityId, Pickable>,
+  pub cameras:    EntityMap<EntityId, Camera>,
 }
 
 impl EntityManager {
@@ -130,17 +131,16 @@ impl EntityManager {
   }
 }
 
-pub struct RenderSystem {
-  pub pick: Option<EntityId>,
-  picking_target: (gl::texture::UnsignedTexture2d,
-                   gl::framebuffer::DepthRenderBuffer),
-  picking_pbo: gl::texture::pixel_buffer::PixelBuffer<u32>,
-  picking_size: (u32, u32),
+struct Picking {
+  texture: gl::texture::UnsignedTexture2d,
+  depth: gl::framebuffer::DepthRenderBuffer,
+  pbo: gl::texture::pixel_buffer::PixelBuffer<u32>,
+  size: (u32, u32),
 }
 
-impl RenderSystem {
-  fn new<F: gl::backend::Facade+Sized>(display: &F) -> Self {
-    let size = (800,600);       // TODO
+impl Picking {
+  fn new_buffers<F: gl::backend::Facade>(display: &F, size: (u32, u32))
+                                         -> (gl::texture::UnsignedTexture2d, gl::framebuffer::DepthRenderBuffer) {
     let color = gl::texture::UnsignedTexture2d::empty_with_format(display,
                                                                   gl::texture::UncompressedUintFormat::U32,
                                                                   gl::texture::MipmapsOption::NoMipmap,
@@ -149,11 +149,52 @@ impl RenderSystem {
                                                         gl::texture::DepthFormat::F32,
                                                         size.0, size.1).unwrap();
 
+    (color, depth)
+  }
+
+  fn new<F: gl::backend::Facade+Sized>(display: &F, size: (u32, u32)) -> Self {
+    let (color, depth) = Self::new_buffers(display, size);
+    Picking {
+      texture: color,
+      depth: depth,
+      pbo: gl::texture::pixel_buffer::PixelBuffer::new_empty(display, 1),
+      size: size,
+    }
+  }
+
+  fn prepare(&mut self, size: (u32, u32)) {
+    if self.size != size {
+      println!("Updating size from {:?} to {:?}", self.size, size);
+
+      self.size = size;
+      let (color, depth) = Self::new_buffers(self.pbo.get_context(), size);
+      self.texture = color;
+      self.depth = depth;
+    }
+  }
+
+  fn get_surface(&self) -> gl::framebuffer::SimpleFrameBuffer {
+    let facade = self.pbo.get_context();
+    gl::framebuffer::SimpleFrameBuffer::with_depth_buffer(facade,
+                                                          &self.texture,
+                                                          &self.depth)
+      .unwrap()
+  }
+}
+
+use std::cell::RefCell;
+pub struct RenderSystem {
+  pub pick: Option<EntityId>,
+  picking: RefCell<Picking>
+}
+
+impl RenderSystem {
+  fn new<F: gl::backend::Facade>(display: &F) -> Self {
+    let size = (800,600);
+
     RenderSystem {
       pick: None,
-      picking_target: (color, depth),
-      picking_pbo: gl::texture::pixel_buffer::PixelBuffer::new_empty(display, 1),
-      picking_size: size,
+      picking: Picking::new(display, size).into()
     }
   }
 
@@ -163,107 +204,96 @@ impl RenderSystem {
                             // TODO: Pass via `World`
                             resources: &ResourceManager,
                             world_uniforms: &WorldUniforms) {
-    // TODO Set clear_color in `World` or `RenderSystem`
-    surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-
-    // Clear picking buffers
-    self.picking_target.0
-      .main_level()
-      .first_layer()
-      .into_image(None).unwrap()
-      .raw_clear_buffer([0u32, 0, 0, 0]);
-    
     use glium::Surface;
-    let mut picking = {
-      let facade = self.picking_pbo.get_context();
-      gl::framebuffer::SimpleFrameBuffer::with_depth_buffer(facade,
-                                                            &self.picking_target.0,
-                                                            &self.picking_target.1).unwrap()
-    };
-    picking.clear_depth(1.0);
+    let mut picking = self.picking.borrow_mut();
+    picking.prepare(surface.get_dimensions());
+    let mut picking_surface = picking.get_surface();
     let picking_program = &resources.programs["picking"];
 
+    // Clear Buffers
+    surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+    picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
 
-    for entity in manager.entities.iter() {
-      if let (Some(g), Some(p)) = (manager.geometries.get(entity),
-                                   manager.positions.get(entity)) {
-        let pickable_id = manager.pickables.get(entity);
-        
-        let model_mat = {
-          let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
-          let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
-          (Transform {
-            pos: p.0,
-            rot: rot.0,
-            scale: sca.0,
-          }).as_matrix()
-        };
+    // Iterate over all entities with geometries
+    for (entity, g) in manager.geometries.iter() {
+      let p = manager.positions[entity];
+      let pickable_id = manager.pickables.get(entity);
 
-        let view_mat = world_uniforms.view_matrix;
-        let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
+      let model_mat = {
+        let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
+        let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
+        (Transform {
+          pos: p.0,
+          rot: rot.0,
+          scale: sca.0,
+        }).as_matrix()
+      };
 
-        let uniforms = uniform! {
-          picking_id:       pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
-          modelMatrix:      model_mat.as_uniform(),
-          projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
-          viewMatrix:       view_mat.as_uniform(),
-          modelViewMatrix:  (view_mat * model_mat).as_uniform(),
-          normalMatrix:     normal_mat.as_uniform(),
-          lightPosition:    world_uniforms.light_position.as_uniform(),
-        };
+      let view_mat = world_uniforms.view_matrix;
+      let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
-        // TODO: Pull out somewhere
-        let params = gl::DrawParameters {
-          depth: gl::Depth {
-            test: gl::draw_parameters::DepthTest::IfLess,
-            write: true,
-            .. Default::default()
-          },
+      let uniforms = uniform! {
+        picking_id:       pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
+        modelMatrix:      model_mat.as_uniform(),
+        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
+        viewMatrix:       view_mat.as_uniform(),
+        modelViewMatrix:  (view_mat * model_mat).as_uniform(),
+        normalMatrix:     normal_mat.as_uniform(),
+        lightPosition:    world_uniforms.light_position.as_uniform(),
+      };
+
+      // TODO: Pull out somewhere
+      let params = gl::DrawParameters {
+        depth: gl::Depth {
+          test: gl::draw_parameters::DepthTest::IfLess,
+          write: true,
           .. Default::default()
-        };
+        },
+        .. Default::default()
+      };
 
-        let ref buffers = resources.meshes[&g.geometry];
-        let ref program = resources.programs[&g.program];
-        surface.draw((&buffers.positions, &buffers.normals),
-                     &buffers.indices,
-                     program,
-                     &uniforms,
-                     &params)
+      let ref buffers = resources.meshes[&g.geometry];
+      let ref program = resources.programs[&g.program];
+      surface.draw((&buffers.positions, &buffers.normals),
+                   &buffers.indices,
+                   program,
+                   &uniforms,
+                   &params)
+        .unwrap();
+
+      if pickable_id.is_some() {
+        picking_surface.draw(&buffers.positions,
+                             &buffers.indices,
+                             &picking_program,
+                             &uniforms,
+                             &params)
           .unwrap();
-
-        if pickable_id.is_some() {
-          picking.draw(&buffers.positions,
-                       &buffers.indices,
-                       &picking_program,
-                       &uniforms,
-                       &params)
-            .unwrap();
-        }
       }
     }
   }
 
   fn update_picked_object(&mut self) {
     // Copy the picking_vbo into main memory and read its value
-    self.pick = self.picking_pbo.read().ok().and_then(|px| {
+    // TODO
+    self.pick = self.picking.borrow().pbo.read().ok().and_then(|px| {
       if px[0] > 0 { Some(px[0] as u64) } else { None }
     });
   }
-  
-  pub fn pick(&self, dimensions: (u32,u32), position: (u32, u32)) {
-    let x = (self.picking_size.0 as f32 / dimensions.0 as f32) * position.0 as f32;
-    let y = (self.picking_size.1 as f32 / dimensions.1 as f32) * position.1 as f32;
+
+  pub fn pick(&self, position: (u32, u32)) {
+    let picking = self.picking.borrow();
+
+    let (x,y) = position;
     let rect = gl::Rect {
       left: x as u32,
-      bottom: self.picking_size.1 - y as u32 - 1,
+      bottom: picking.size.1 - y as u32 - 1,
       width: 1,
       height: 1
     };
-    // Copy the target pixel into our picking_vbo (which stores just one pixel)
-    self.picking_target.0.main_level()
+    picking.texture.main_level()
       .first_layer()
       .into_image(None).unwrap()
-      .raw_read_to_pixel_buffer(&rect, &self.picking_pbo);
+      .raw_read_to_pixel_buffer(&rect, &picking.pbo);
   }
 }
 
@@ -328,7 +358,7 @@ impl World {
   }
 
   fn current_camera(&self) -> Option<EntityId> {
-     self.entities.entities(Component::Camera).into_iter().next()
+    self.entities.entities(Component::Camera).into_iter().next()
   }
 
   fn uniforms(&self, (width,height): (u32, u32)) -> WorldUniforms {
@@ -359,7 +389,6 @@ impl World {
   }
 
   pub fn update(&mut self, delta: Millis) {
-    // TODO: Unoptimize
     self.render_system.update_picked_object();
     self.velocity_system.run(&mut self.entities, delta);
     self.camera_system.run(&mut self.entities, delta);

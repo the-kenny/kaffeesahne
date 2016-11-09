@@ -11,15 +11,15 @@ pub struct Transform {
 impl Transform {
   pub fn as_matrix(&self) -> Matrix4<f32> {
     let mut model: Matrix4<f32> = na::one();
-    model *= Matrix4::new(self.scale.x, 0.0,          0.0,          0.0,
-                          0.0,          self.scale.y, 0.0,          0.0,
-                          0.0,          0.0,          self.scale.z, 0.0,
-                          0.0,          0.0,          0.0,          1.0);
-    model *= na::to_homogeneous(self.rot.to_rotation_matrix().submatrix());
     model *= Matrix4::new(1.0, 0.0, 0.0, self.pos.x,
                           0.0, 1.0, 0.0, self.pos.y,
                           0.0, 0.0, 1.0, self.pos.z,
                           0.0, 0.0, 0.0, 1.0);
+    model *= na::to_homogeneous(self.rot.to_rotation_matrix().submatrix());
+    model *= Matrix4::new(self.scale.x, 0.0,          0.0,          0.0,
+                          0.0,          self.scale.y, 0.0,          0.0,
+                          0.0,          0.0,          self.scale.z, 0.0,
+                          0.0,          0.0,          0.0,          1.0);
     model
   }
 }

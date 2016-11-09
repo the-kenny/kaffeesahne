@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["Moritz Ulrich <moritz@tarn-vedra.de>"]
 
 [dependencies]
-enum-set = "0.0.6"
 glium = "*"
-image = "*"
 nalgebra = "*"
 tobj = "*"
