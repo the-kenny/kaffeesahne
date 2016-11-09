@@ -97,7 +97,7 @@ fn main() {
         Event::Closed => return,
         Event::MouseMoved(x,y) => {
           println!("{:?}", world.render_system.pick);
-          world.render_system.pick((x as u32, y as u32))
+          world.render_system.pick_position = Some((x as u32, y as u32));
         }
         _ => (),
       }
