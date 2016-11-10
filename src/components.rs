@@ -40,33 +40,6 @@ pub struct Camera {
   pub tracking: Option<EntityId>,
 }
 
-pub trait IComponent {
-  fn cname(&self) -> Component;
-}
-
-macro_rules! components {
-  {$($name:ident, )*} => {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-    pub enum Component {
-      $($name, )*
-    }
-
-    $(impl IComponent for $name {
-      fn cname(&self) -> Component { Component::$name }
-    })*
-  }
-}
-
-components! {
-  Position,
-  Scale,
-  Rotation,
-  Velocity,
-  Geometry,
-  Pickable,
-  Camera,
-}
-
 #[derive(Default)]
 pub struct EntityManager {
   pub entities:   BTreeSet<EntityId>,
@@ -82,23 +55,14 @@ pub struct EntityManager {
 }
 
 impl EntityManager {
-  pub fn entities(&self, component: Component) -> Vec<EntityId> {
-    use self::Component::*;
-    match component {
-      Position => self.positions.keys().cloned().collect(),
-      Scale    => self.scales.keys().cloned().collect(),
-      Rotation => self.rotations.keys().cloned().collect(),
-      Velocity => self.velocities.keys().cloned().collect(),
-      Geometry => self.geometries.keys().cloned().collect(),
-      Pickable => self.pickables.keys().cloned().collect(),
-      Camera   => self.cameras.keys().cloned().collect(),
-    }
-  }
-
   pub fn new_entity(&mut self) -> EntityId {
     self.highest_id += 1;
     self.entities.insert(self.highest_id);
     self.highest_id
+  }
+
+  pub fn delete_entity(&mut self, entity: EntityId) {
+    
   }
 
   pub fn add_geometry(&mut self, entity: EntityId, g: Geometry) {
@@ -206,15 +170,23 @@ impl RenderSystem {
                             // TODO: Pass via `World`
                             resources: &ResourceManager,
                             world_uniforms: &WorldUniforms) {
-    use glium::Surface;
+    // TODO: Pull out somewhere
+    let params = gl::DrawParameters {
+      depth: gl::Depth {
+        test: gl::draw_parameters::DepthTest::IfLess,
+        write: true,
+        .. Default::default()
+      },
+      .. Default::default()
+    };
+
     let mut picking = self.picking.borrow_mut();
     picking.prepare(surface.get_dimensions());
-    let mut picking_surface = picking.get_surface();
-    let picking_program = &resources.programs["picking"];
 
     // Clear Buffers
     surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-    picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
+    let mut pick_items = Vec::with_capacity(manager.pickables.len());
 
     // Iterate over all entities with geometries
     for (entity, g) in manager.geometries.iter() {
@@ -244,16 +216,6 @@ impl RenderSystem {
         lightPosition:    world_uniforms.light_position.as_uniform(),
       };
 
-      // TODO: Pull out somewhere
-      let params = gl::DrawParameters {
-        depth: gl::Depth {
-          test: gl::draw_parameters::DepthTest::IfLess,
-          write: true,
-          .. Default::default()
-        },
-        .. Default::default()
-      };
-
       let ref buffers = resources.meshes[&g.geometry];
       let ref program = resources.programs[&g.program];
       surface.draw((&buffers.positions, &buffers.normals),
@@ -264,13 +226,24 @@ impl RenderSystem {
         .unwrap();
 
       if pickable_id.is_some() {
-        picking_surface.draw(&buffers.positions,
-                             &buffers.indices,
+        pick_items.push((&buffers.positions,
+                         &buffers.indices,
+                         uniforms));
+      }
+    }
+
+    use glium::Surface;
+    let mut picking_surface = picking.get_surface();
+    let picking_program = &resources.programs["picking"];
+
+    picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+    for (positions, indices, uniforms) in pick_items.into_iter() {
+        picking_surface.draw(positions,
+                             indices,
                              &picking_program,
                              &uniforms,
                              &params)
           .unwrap();
-      }
     }
   }
 
@@ -307,26 +280,24 @@ struct VelocitySystem;
 impl VelocitySystem {
   // TODO: Move to trait
   fn run(&self, manager: &mut EntityManager, delta: Millis) {
-    for entity in manager.entities(Component::Velocity) {
-      if let Some(velocity) = manager.velocities.get(&entity) {
-        let delta = delta.as_seconds();
-        // Update component.position
-        manager.positions.get_mut(&entity).unwrap().0 += velocity.linear * delta;
+    for (entity, velocity) in manager.velocities.iter() {
+      let delta = delta.as_seconds();
+      // Update component.position
+      manager.positions.get_mut(&entity).unwrap().0 += velocity.linear * delta;
 
-        // Update component.rotation
-        let angle = velocity.angular.0.angle()*delta;
-        let axis  = velocity.angular.0.axis().unwrap();
+      // Update component.rotation
+      let angle = velocity.angular.0.angle()*delta;
+      let axis  = velocity.angular.0.axis().unwrap();
 
-        use std::collections::btree_map::Entry::*;
-        match manager.rotations.entry(entity) {
-          Vacant(entry) => {
-            entry.insert(Rotation(quat_rotate(angle, axis)));
-          },
-          Occupied(entry) => {
-            entry.into_mut().0 *= UnitQuaternion::from_axisangle(axis, angle);
-          },
-        };
-      }
+      use std::collections::btree_map::Entry::*;
+      match manager.rotations.entry(*entity) {
+        Vacant(entry) => {
+          entry.insert(Rotation(quat_rotate(angle, axis)));
+        },
+        Occupied(entry) => {
+          entry.into_mut().0 *= UnitQuaternion::from_axisangle(axis, angle);
+        },
+      };
     }
   }
 }
@@ -334,8 +305,7 @@ impl VelocitySystem {
 struct CameraSystem;
 impl CameraSystem {
   fn run(&self, manager: &mut EntityManager, _delta: Millis) {
-    for camera in manager.entities(Component::Camera) {
-      let camera = manager.cameras.get_mut(&camera).unwrap();
+    for (_, camera) in manager.cameras.iter_mut() {
       if let Some(target) = camera.tracking {
         camera.target = manager.positions[&target].0.to_point();
       }
@@ -363,7 +333,7 @@ impl World {
   }
 
   fn current_camera(&self) -> Option<EntityId> {
-    self.entities.entities(Component::Camera).into_iter().next()
+    self.entities.cameras.iter().next().map(|(id, _)| *id)
   }
 
   fn uniforms(&self, (width,height): (u32, u32)) -> WorldUniforms {

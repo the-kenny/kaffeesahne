@@ -7,7 +7,7 @@ use kaffeesahne::*;
 use std::time::{Duration,Instant};
 
 fn main() {
-  use glium::{DisplayBuild, Surface};
+  use glium::DisplayBuild;
   let display = gl::glutin::WindowBuilder::new()
     .with_depth_buffer(24)
     .build_glium().unwrap();
@@ -44,7 +44,7 @@ fn main() {
   }
 
   // TODO: 256 entities get too slow. Octree?
-  for i in 0..64 {
+  for i in 0..128 {
     let cube = world.entities.new_entity();
     let position = Position(Vector3::new((16.0 - i as f32)*0.25, 1.0, 0.0));
     world.entities.set_position(cube, position);
@@ -67,28 +67,23 @@ fn main() {
   });
   world.entities.set_position(camera, Position(Vector3::new(0.0, 1.5, 3.0)));
 
-  let MS_PER_UPDATE = Duration::new(0, 1000000000/60);
+  let ms_per_update = Duration::new(0, 1000000000/60);
   let mut previous = Instant::now();
   let mut lag = Duration::new(0, 00);
 
-  let mut render_calls: u32 = 0;
-  let mut update_calls: u32 = 0;
   loop {
     let now = Instant::now();
     lag += now - previous;
     previous = now;
 
-    while lag >= MS_PER_UPDATE {
-      update_calls += 1;
-      world.update(MS_PER_UPDATE.into());
-      lag -= MS_PER_UPDATE;
+    while lag >= ms_per_update {
+      world.update(ms_per_update.into());
+      lag -= ms_per_update;
     }
 
     let mut target = display.draw();
     world.draw(&mut target, &resources);
     target.finish().unwrap();
-
-    render_calls += 1;
 
     // TODO: How to handle these events? Picking with vsync still fucks up
     for ev in display.poll_events() {
@@ -101,13 +96,6 @@ fn main() {
         }
         _ => (),
       }
-    }
-
-    // For every 100 render calls, print how many update calls there were
-    if render_calls >= 100 {
-      println!("update/render ratio: {}", update_calls as f32 / render_calls as f32);
-      update_calls = 0;
-      render_calls = 0;
     }
   }
 }
