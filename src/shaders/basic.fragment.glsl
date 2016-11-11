@@ -9,7 +9,8 @@ uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
 
 const vec3 lightColor = vec3(1.0, 1.0, 1.0);
-const vec4 surfaceColor = vec4(0.6, 0.6, 0.6, 1.0);
+const vec4 surfaceColor = vec4(1.0, 0.5, 0.0, 1.0);
+const vec3 ambientColor = vec3(0.1, 0.1, 0.1);
 
 void main() {
   vec3 normal         = normalize(normalMatrix * fragNormal);
@@ -19,5 +20,5 @@ void main() {
   float brightness = dot(normal, surfaceToLight) / (length(surfaceToLight) * length(normal));
   brightness = clamp(brightness, 0, 1);
 
-  color = vec4(brightness * lightColor * surfaceColor.rgb, surfaceColor.a);
+  color = vec4(brightness * lightColor * surfaceColor.rgb + ambientColor, surfaceColor.a);
 }

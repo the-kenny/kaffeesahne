@@ -318,6 +318,8 @@ pub struct World {
   velocity_system: VelocitySystem,
   camera_system: CameraSystem,
   pub render_system: RenderSystem, // TODO
+
+  pub light: Point3<f32>,
 }
 
 impl World {
@@ -329,6 +331,8 @@ impl World {
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
       render_system: render_system,
+
+      light: na::Point3::new(0.0, 0.0, 0.0),
     }
   }
 
@@ -339,7 +343,6 @@ impl World {
   fn uniforms(&self, (width,height): (u32, u32)) -> WorldUniforms {
     let camera = self.current_camera()
       .expect("Scene doesn't contain a camera!");
-    let light = Vector3::<f32>::new(-3.0, 1.0, 3.0);
 
     let view_mat: Matrix4<f32> = na::to_homogeneous(
       &Isometry3::look_at_rh(&self.entities.positions[&camera].0.as_point(),
@@ -359,7 +362,7 @@ impl World {
     WorldUniforms {
       projection_matrix: projection_mat,
       view_matrix:       view_mat,
-      light_position:    Point3::new(light.x, light.y, light.z),
+      light_position:    self.light,
     }
   }
 
