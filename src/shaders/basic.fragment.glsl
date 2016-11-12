@@ -3,12 +3,12 @@
 in vec3 fragNormal;
 in vec3 fragVert;
 
-out vec4 color;
 uniform vec3 lightPosition;
+uniform vec3 cameraPosition;
 uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
-uniform mat4 viewMatrix;
-uniform mat4 modelViewMatrix;
+
+out vec4 color;
 
 const vec3 lightColor = vec3(1.0, 1.0, 1.0);
 const vec4 surfaceColor = vec4(1.0, 0.5, 0.0, 1.0);
@@ -23,7 +23,6 @@ void main() {
   vec4 worldPosition   = modelMatrix * vec4(fragVert, 1.0);
   vec3 normal          = normalize(normalMatrix*fragNormal);
   vec3 lightDirection  = normalize(lightPosition - worldPosition.xyz);
-  vec3 cameraPosition  = (inverse(viewMatrix) * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   vec3 cameraDirection = normalize(cameraPosition - worldPosition.xyz);
 
   color.xyz = specularLighting(normal, lightDirection, cameraDirection)

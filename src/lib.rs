@@ -35,12 +35,6 @@ impl From<Duration> for Millis {
   }
 }
 
-pub struct WorldUniforms {
-  pub projection_matrix: Matrix4<f32>,
-  pub view_matrix:       Matrix4<f32>,
-  pub light_position:    Point3<f32>,
-}
-
 pub fn matrix3_from_matrix4<T: Copy>(m: &Matrix4<T>) -> Matrix3<T> {
   Matrix3::new(m[(0,0)], m[(1,0)], m[(2,0)],
                m[(0,1)], m[(1,1)], m[(2,1)],

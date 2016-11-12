@@ -197,8 +197,8 @@ impl RenderSystem {
         let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
         let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
         (Transform {
-          pos: p.0,
-          rot: rot.0,
+          pos:   p.0,
+          rot:   rot.0,
           scale: sca.0,
         }).as_matrix()
       };
@@ -207,13 +207,14 @@ impl RenderSystem {
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
       let uniforms = uniform! {
-        picking_id:       pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
+        pickingId:       pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
         modelMatrix:      model_mat.as_uniform(),
         projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
         viewMatrix:       view_mat.as_uniform(),
         modelViewMatrix:  (view_mat * model_mat).as_uniform(),
         normalMatrix:     normal_mat.as_uniform(),
         lightPosition:    world_uniforms.light_position.as_uniform(),
+        cameraPosition:   world_uniforms.camera_position.as_uniform(),
       };
 
       let ref buffers = resources.meshes[&g.geometry];
@@ -313,6 +314,13 @@ impl CameraSystem {
   }
 }
 
+pub struct WorldUniforms {
+  pub projection_matrix: na::Matrix4<f32>,
+  pub view_matrix:       na::Matrix4<f32>,
+  pub light_position:    na::Point3<f32>,
+  pub camera_position:   na::Point3<f32>,
+}
+
 pub struct World {
   pub entities: EntityManager,
   velocity_system: VelocitySystem,
@@ -344,8 +352,9 @@ impl World {
     let camera = self.current_camera()
       .expect("Scene doesn't contain a camera!");
 
+    let camera_position = self.entities.positions[&camera].0.as_point();
     let view_mat: Matrix4<f32> = na::to_homogeneous(
-      &Isometry3::look_at_rh(&self.entities.positions[&camera].0.as_point(),
+      &Isometry3::look_at_rh(&camera_position,
                              &self.entities.cameras[&camera].target,
                              &Vector3::new(0.0, 1.0, 0.0)));
 
@@ -363,6 +372,7 @@ impl World {
       projection_matrix: projection_mat,
       view_matrix:       view_mat,
       light_position:    self.light,
+      camera_position:   *camera_position,
     }
   }
 

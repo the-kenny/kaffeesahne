@@ -1,6 +1,8 @@
 use nalgebra as na;
 use nalgebra::{Vector3, UnitQuaternion, Matrix4};
 
+// TODO: We might want to get rid of Transform as an intermediate for
+// render()
 #[derive(Debug, Copy, Clone)]
 pub struct Transform {
   pub pos:   Vector3<f32>,

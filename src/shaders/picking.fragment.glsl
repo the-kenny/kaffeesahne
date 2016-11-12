@@ -1,8 +1,8 @@
 #version 330 core
 
-uniform uint picking_id;
+uniform uint pickingId;
 out uint color;
 
 void main() {
-  color = picking_id;
+  color = pickingId;
 }
