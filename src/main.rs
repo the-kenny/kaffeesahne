@@ -28,6 +28,12 @@ fn main() {
                            "src/shaders/picking.vertex.glsl",
                            "src/shaders/picking.fragment.glsl");
 
+  let camera_positions = [Position(Vector3::new(0.0, 1.5, -3.0)),
+                          Position(Vector3::new(3.0, 1.5, 0.0)),
+                          Position(Vector3::new(0.0, 1.5, 3.0)),
+                          Position(Vector3::new(-3.0, 1.5, 0.0))];
+  let mut camera_idx: usize = 0;
+
   let terrain = world.entities.new_entity();
   {
     let position = Position(Vector3::new(0.0, 0.0, 0.0));
@@ -78,7 +84,7 @@ fn main() {
   //   });
   // }
 
-  world.light = na::Point3::new(-1.0, 0.5, 0.0);
+  world.light = na::Point3::new(1.0, 0.5, 0.0);
   {
     let cube = world.entities.new_entity();
     let position = Position(world.light.to_vector());
@@ -90,13 +96,12 @@ fn main() {
     world.entities.set_scale(cube, Scale(na::one::<na::Vector3<f32>>()*0.05));
   }
 
-
   let camera = world.entities.new_entity();
   world.entities.add_camera(camera, Camera {
     target: Point3::new(0.0, 0.0, 0.0),
     tracking: None,
   });
-  world.entities.set_position(camera, Position(Vector3::new(0.0, 1.5, -3.0)));
+  world.entities.set_position(camera, camera_positions[camera_idx]);
 
   let ms_per_update = Duration::new(0, 1000000000/60);
   let mut previous = Instant::now();
@@ -121,8 +126,14 @@ fn main() {
       use glium::glutin::*;
       match ev {
         Event::Closed => return,
+        Event::MouseInput(ElementState::Pressed, _) => {
+          camera_idx = (camera_idx+1) % camera_positions.len();
+          let pos = camera_positions[camera_idx];
+          println!("{:?}", pos);
+          world.entities.set_position(camera, pos);
+        },
         Event::MouseMoved(x,y) => {
-          println!("{:?}", world.render_system.pick);
+          // println!("{:?}", world.render_system.pick);
           world.render_system.pick_position = Some((x as u32, y as u32));
         }
         _ => (),
