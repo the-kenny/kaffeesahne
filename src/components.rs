@@ -363,10 +363,9 @@ impl World {
 
   pub fn update(&mut self, delta: Millis) {
     // Update picked entity
-    if self.mouse_position.is_some() {
-      self.entities.picked_entity = self.picking_system
-        .read_picking_buffer();
-    }
+    self.entities.picked_entity = self.mouse_position.and_then(|_| {
+      self.picking_system.read_picking_buffer()
+    });
     
     self.velocity_system.run(&mut self.entities, delta);
     self.camera_system.run(&mut self.entities, delta);

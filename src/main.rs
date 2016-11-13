@@ -134,11 +134,13 @@ fn main() {
         Event::MouseInput(ElementState::Pressed, _) => {
           camera_idx = (camera_idx+1) % camera_positions.len();
           let pos = camera_positions[camera_idx];
-          println!("{:?}", pos);
           world.entities.set_position(camera, pos);
         },
         Event::MouseMoved(x,y) => {
           world.mouse_position = Some((x as u32, y as u32));
+        },
+        Event::Focused(false) => {
+          world.mouse_position = None;
         }
         _ => (),
       }
