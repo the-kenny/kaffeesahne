@@ -215,7 +215,7 @@ impl RenderSystem {
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
       let uniforms = uniform! {
-        pickingId:       pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
+        pickingId:        pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
         modelMatrix:      model_mat.as_uniform(),
         projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
         viewMatrix:       view_mat.as_uniform(),

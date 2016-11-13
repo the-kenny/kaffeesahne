@@ -10,6 +10,7 @@ fn main() {
   use glium::DisplayBuild;
   let display = gl::glutin::WindowBuilder::new()
     .with_depth_buffer(24)
+    .with_multisampling(8)
     .build_glium().unwrap();
 
   let mut world = World::new(&display);
