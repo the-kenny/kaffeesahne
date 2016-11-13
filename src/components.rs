@@ -52,6 +52,8 @@ pub struct EntityManager {
   pub geometries: EntityMap<EntityId, Geometry>,
   pub pickables:  EntityMap<EntityId, Pickable>,
   pub cameras:    EntityMap<EntityId, Camera>,
+
+  pub picked_entity: Option<EntityId>,
 }
 
 impl EntityManager {
@@ -95,14 +97,14 @@ impl EntityManager {
   }
 }
 
-struct Picking {
+struct Pickingsystem {
   texture: gl::texture::UnsignedTexture2d,
-  depth: gl::framebuffer::DepthRenderBuffer,
-  pbo: gl::texture::pixel_buffer::PixelBuffer<u32>,
-  size: (u32, u32),
+  depth:   gl::framebuffer::DepthRenderBuffer,
+  pbo:     gl::texture::pixel_buffer::PixelBuffer<u32>,
+  size:    (u32, u32),
 }
 
-impl Picking {
+impl Pickingsystem {
   fn new_buffers<F: gl::backend::Facade>(display: &F, size: (u32, u32))
                                          -> (gl::texture::UnsignedTexture2d, gl::framebuffer::DepthRenderBuffer) {
     let color = gl::texture::UnsignedTexture2d::empty_with_format(display,
@@ -118,7 +120,7 @@ impl Picking {
 
   fn new<F: gl::backend::Facade+Sized>(display: &F, size: (u32, u32)) -> Self {
     let (color, depth) = Self::new_buffers(display, size);
-    Picking {
+    Pickingsystem {
       texture: color,
       depth: depth,
       pbo: gl::texture::pixel_buffer::PixelBuffer::new_empty(display, 1),
@@ -130,10 +132,10 @@ impl Picking {
     if self.size != size {
       println!("Updating size from {:?} to {:?}", self.size, size);
 
-      self.size = size;
       let (color, depth) = Self::new_buffers(self.pbo.get_context(), size);
       self.texture = color;
       self.depth = depth;
+      self.size = size;
     }
   }
 
@@ -144,32 +146,41 @@ impl Picking {
                                                           &self.depth)
       .unwrap()
   }
-}
 
-use std::cell::RefCell;
-pub struct RenderSystem {
-  pub pick: Option<EntityId>,
-  pub pick_position: Option<(u32, u32)>,
-  picking: RefCell<Picking>
-}
-
-impl RenderSystem {
-  fn new<F: gl::backend::Facade>(display: &F) -> Self {
-    let size = (800,600);
-
-    RenderSystem {
-      pick: None,
-      pick_position: None,
-      picking: Picking::new(display, size).into()
-    }
+  fn read_picking_buffer(&mut self) -> Option<EntityId> {
+    // Copy the picking_vbo into main memory and read its value
+    self.pbo.read().ok().and_then(|px| {
+      if px[0] > 0 { Some(px[0] as u64) } else { None }
+    })
   }
 
-  fn render<S: gl::Surface>(&self,
-                            manager: &EntityManager,
-                            surface: &mut S,
-                            // TODO: Pass via `World`
-                            resources: &ResourceManager,
-                            world_uniforms: &WorldUniforms) {
+  pub fn update(&self, position: (u32, u32)) {
+    if position.0 <= self.size.0 && position.1 <= self.size.1 {
+      let rect = gl::Rect {
+        left: position.0 as u32,
+        bottom: self.size.1 - position.1 as u32 - 1,
+        width: 1,
+        height: 1
+      };
+      self.texture.main_level()
+        .first_layer()
+        .into_image(None).unwrap()
+        .raw_read_to_pixel_buffer(&rect, &self.pbo);
+    }
+  }
+}
+
+struct RenderSystem;
+
+impl RenderSystem {
+  fn render<S, PS>(&self,
+                   manager: &EntityManager,
+                   surface: &mut S,
+                   picking_surface: Option<&mut PS>,
+                   // TODO: Pass via `World`
+                   resources: &ResourceManager,
+                   world_uniforms: &WorldUniforms)
+    where S: gl::Surface, PS: gl::Surface {
     // TODO: Pull out somewhere
     let params = gl::DrawParameters {
       depth: gl::Depth {
@@ -179,9 +190,6 @@ impl RenderSystem {
       },
       .. Default::default()
     };
-
-    let mut picking = self.picking.borrow_mut();
-    picking.prepare(surface.get_dimensions());
 
     // Clear Buffers
     surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
@@ -233,45 +241,18 @@ impl RenderSystem {
       }
     }
 
-    use glium::Surface;
-    let mut picking_surface = picking.get_surface();
-    let picking_program = &resources.programs["picking"];
+    if let Some(picking_surface) = picking_surface {
+      let picking_program = &resources.programs["picking"];
 
-    picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-    for (positions, indices, uniforms) in pick_items.into_iter() {
+      picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+      for (positions, indices, uniforms) in pick_items.into_iter() {
         picking_surface.draw(positions,
                              indices,
                              &picking_program,
                              &uniforms,
                              &params)
           .unwrap();
-    }
-  }
-
-  fn read_picking_buffer(&mut self) {
-    // Copy the picking_vbo into main memory and read its value
-    self.pick = if self.pick_position.is_some() {
-      self.picking.borrow().pbo.read().ok().and_then(|px| {
-        if px[0] > 0 { Some(px[0] as u64) } else { None }
-      })
-    } else {
-      None
-    }
-  }
-
-  pub fn update_picking(&self) {
-    let picking = self.picking.borrow();
-    if let Some((x,y)) = self.pick_position {
-      let rect = gl::Rect {
-        left: x as u32,
-        bottom: picking.size.1 - y as u32 - 1,
-        width: 1,
-        height: 1
-      };
-      picking.texture.main_level()
-        .first_layer()
-        .into_image(None).unwrap()
-        .raw_read_to_pixel_buffer(&rect, &picking.pbo);
+      }
     }
   }
 }
@@ -319,28 +300,32 @@ pub struct WorldUniforms {
   pub view_matrix:       na::Matrix4<f32>,
   pub light_position:    na::Point3<f32>,
   pub camera_position:   na::Point3<f32>,
+
 }
 
 pub struct World {
   pub entities: EntityManager,
   velocity_system: VelocitySystem,
   camera_system: CameraSystem,
-  pub render_system: RenderSystem, // TODO
+  render_system: RenderSystem,
+  picking_system: Pickingsystem,
 
+  // TODO: Make an Entity
   pub light: Point3<f32>,
+  pub mouse_position: Option<(u32, u32)>,
 }
 
 impl World {
   pub fn new<F: gl::backend::Facade+Sized>(display: &F) -> Self {
-    let render_system = RenderSystem::new(display);
-
     World {
       entities: EntityManager::default(),
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
-      render_system: render_system,
+      render_system: RenderSystem,
+      picking_system: Pickingsystem::new(display, (800,600)),
 
       light: na::Point3::new(0.0, 0.0, 0.0),
+      mouse_position: None,
     }
   }
 
@@ -377,23 +362,36 @@ impl World {
   }
 
   pub fn update(&mut self, delta: Millis) {
-    self.render_system.read_picking_buffer();
+    // Update picked entity
+    if self.mouse_position.is_some() {
+      self.entities.picked_entity = self.picking_system
+        .read_picking_buffer();
+    }
+    
     self.velocity_system.run(&mut self.entities, delta);
     self.camera_system.run(&mut self.entities, delta);
   }
 
-  pub fn draw<S>(&self,
+  pub fn draw<S>(&mut self,
                  surface: &mut S,
                  // TODO: Pass via `World`
                  resources: &ResourceManager)
     where S: gl::Surface {
     let surface_size = surface.get_dimensions();
-    let world_uniforms = self.uniforms(surface_size);
 
+    // Update PickingSystem's dimensions
+    self.picking_system.prepare(surface_size);
+    let mut picking_surface = self.picking_system.get_surface();
+    
+    let world_uniforms = self.uniforms(surface_size);
     self.render_system.render(&self.entities,
                               surface,
+                              Some(&mut picking_surface),
                               resources,
                               &world_uniforms);
-    self.render_system.update_picking();
+
+    if let Some(pos) = self.mouse_position {
+      self.picking_system.update(pos);
+    }
   }
 }

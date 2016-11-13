@@ -86,14 +86,15 @@ fn main() {
 
   world.light = na::Point3::new(1.0, 0.5, 0.0);
   {
-    let cube = world.entities.new_entity();
+    let light = world.entities.new_entity();
     let position = Position(world.light.to_vector());
-    world.entities.set_position(cube, position);
-    world.entities.add_geometry(cube, Geometry {
+    world.entities.set_position(light, position);
+    world.entities.set_pickable(light, true);
+    world.entities.add_geometry(light, Geometry {
       geometry: "cube",
       program:  "basic",
     });
-    world.entities.set_scale(cube, Scale(na::one::<na::Vector3<f32>>()*0.05));
+    world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));
   }
 
   let camera = world.entities.new_entity();
@@ -121,6 +122,10 @@ fn main() {
     world.draw(&mut target, &resources);
     target.finish().unwrap();
 
+    if let Some(pick) = world.entities.picked_entity {
+      println!("{:?}", pick);
+    }
+
     // TODO: How to handle these events? Picking with vsync still fucks up
     for ev in display.poll_events() {
       use glium::glutin::*;
@@ -133,8 +138,7 @@ fn main() {
           world.entities.set_position(camera, pos);
         },
         Event::MouseMoved(x,y) => {
-          // println!("{:?}", world.render_system.pick);
-          world.render_system.pick_position = Some((x as u32, y as u32));
+          world.mouse_position = Some((x as u32, y as u32));
         }
         _ => (),
       }
