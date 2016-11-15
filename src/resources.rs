@@ -28,10 +28,10 @@ impl ResourceManager {
   }
 
   pub fn compile_shader<P: AsRef<Path>>(&mut self,
-                                    display: &gl::Display,
-                                    name: &'static str,
-                                    vertex: P,
-                                    fragment: P) {
+                                        display: &gl::Display,
+                                        name: &'static str,
+                                        vertex: P,
+                                        fragment: P) {
     use std::fs::File;
     use std::io::Read;
     let vertex_src = {
@@ -56,9 +56,9 @@ impl ResourceManager {
   }
 
   pub fn load_obj<P>(&mut self,
-                 display: &gl::Display,
-                 name: &'static str,
-                 path: P)
+                     display: &gl::Display,
+                     name: &'static str,
+                     path: P)
     where P: AsRef<Path>+fmt::Display {
     println!("Loading {} from {}", name, path);
     
@@ -128,6 +128,26 @@ impl ResourceManager {
       normals: normals,
       indices: indices,
     });
+  }
+
+  pub fn make_axis_object<F: gl::backend::Facade>(&mut self, display: &F, name: &'static str) {
+    let vertices = [(0.0, 0.0, 0.0).into(),
+                    (1.0, 0.0, 0.0).into(),
+                    (0.0, 1.0, 0.0).into(),
+                    (0.0, 0.0, 1.0).into()];
+    let positions = gl::VertexBuffer::new(display, &vertices).unwrap();
+    let normals = gl::VertexBuffer::empty(display, 0).unwrap();
+    // let indices   = gl::index::NoIndices(gl::index::PrimitiveType::LinesList);
+    let indices   = gl::index::IndexBuffer::new(display,
+                                                gl::index::PrimitiveType::LinesList,
+                                                &[0,1, 0,2, 0,3]).unwrap();
+
+    self.meshes.insert(name, BufferedMesh {
+      positions: positions,
+      normals: normals,
+      indices: indices,
+    });
+
   }
 }
 

@@ -19,6 +19,8 @@ fn main() {
   resources.load_obj(&display, "terrain", "terrain.obj");
   resources.load_obj(&display, "teapot", "teapot.obj");
   resources.load_obj(&display, "cube", "cube.obj");
+  resources.make_axis_object(&display, "axis");
+
   resources.compile_shader(&display,
                            "basic",
                            "src/shaders/basic.vertex.glsl",
@@ -28,6 +30,10 @@ fn main() {
                            "picking",
                            "src/shaders/picking.vertex.glsl",
                            "src/shaders/picking.fragment.glsl");
+  resources.compile_shader(&display,
+                           "axis",
+                           "src/shaders/axis.vertex.glsl",
+                           "src/shaders/axis.fragment.glsl");
 
   let camera_positions = [Position(Vector3::new(0.0, 1.5, -3.0)),
                           Position(Vector3::new(3.0, 1.5, 0.0)),
@@ -135,6 +141,7 @@ fn main() {
         Event::MouseInput(ElementState::Pressed, _) => {
           camera_idx = (camera_idx+1) % camera_positions.len();
           let pos = camera_positions[camera_idx];
+          println!("camera: {:?}", pos);
           world.entities.set_position(camera, pos);
         },
         Event::MouseMoved(x,y) => {

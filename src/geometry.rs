@@ -35,28 +35,34 @@ impl Default for Transform {
   }
 }
 
+macro_rules! implement_from {
+  ( $t:ident, $inner:ident ) => {
+    impl From<Vector3<f32>> for $t {
+      fn from(v: Vector3<f32>) -> Self {
+        $t::new(v.x, v.y, v.z)
+      }
+    }
+
+    impl From<(f32, f32, f32)> for $t {
+      fn from((x, y, z): (f32, f32, f32)) -> Self {
+        $t::new(x, y, z)
+      }
+    }
+
+    impl $t {
+      fn new(x: f32, y: f32, z: f32) -> Self {
+        $t { $inner: [x, y, z] }
+      }
+    }
+  };
+}
 
 #[derive(Clone, Copy)]
 pub struct Vertex { position: [f32; 3] }
 implement_vertex!(Vertex, position);
-
-impl From<Vector3<f32>> for Vertex {
-  fn from(v: Vector3<f32>) -> Self {
-    Vertex {
-      position: [v.x, v.y, v.z]
-    }    
-  }
-}
+implement_from!(Vertex, position);
 
 #[derive(Clone, Copy)]
 pub struct Normal { normal: [f32; 3] }
 implement_vertex!(Normal, normal);
-
-impl From<Vector3<f32>> for Normal {
-  fn from(v: Vector3<f32>) -> Self {
-    Normal {
-      normal: [v.x, v.y, v.z]
-    }
-  }
-}
-
+implement_from!(Normal, normal);

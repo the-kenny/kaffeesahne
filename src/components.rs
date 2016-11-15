@@ -254,6 +254,23 @@ impl RenderSystem {
           .unwrap();
       }
     }
+
+    // Render axis system
+    {
+      let uniforms = uniform! {
+        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
+        viewMatrix:       world_uniforms.view_matrix.as_uniform(),
+      };
+
+      let ref buffers = resources.meshes["axis"];
+      let ref program = resources.programs["axis"];
+      surface.draw(&buffers.positions,
+                   &buffers.indices,
+                   program,
+                   &uniforms,
+                   &gl::DrawParameters::default())
+        .unwrap();
+    }
   }
 }
 
