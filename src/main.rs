@@ -91,7 +91,7 @@ fn main() {
   //   });
   // }
 
-  world.light = na::Point3::new(1.0, 0.5, 0.0);
+  world.light = na::Point3::new(1.0, 1.0, 0.0);
   {
     let light = world.entities.new_entity();
     let position = Position(world.light.to_vector());

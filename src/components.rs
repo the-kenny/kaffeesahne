@@ -63,8 +63,8 @@ impl EntityManager {
     self.highest_id
   }
 
-  pub fn delete_entity(&mut self, entity: EntityId) {
-    
+  pub fn delete_entity(&mut self, _entity: EntityId) {
+    unimplemented!();
   }
 
   pub fn add_geometry(&mut self, entity: EntityId, g: Geometry) {
