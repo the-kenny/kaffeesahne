@@ -49,7 +49,7 @@ fn main() {
       geometry: "terrain",
       program:  "basic",
     });
-    world.entities.set_scale(terrain, Scale(na::one::<na::Vector3<f32>>()*0.5));
+    // world.entities.set_scale(terrain, Scale(na::one::<na::Vector3<f32>>()));
     world.entities.set_pickable(terrain, true);
     world.entities.velocities.insert(terrain, Velocity {
       linear: Vector3::new(0.0, 0.0, 0.0),
