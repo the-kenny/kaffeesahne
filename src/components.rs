@@ -6,16 +6,44 @@ use super::*;
 type EntityId = u64;
 type EntityMap<K,V> = BTreeMap<K,V>;
 
+pub trait AsMatrix {
+  fn as_matrix(&self) -> Matrix4<f32>;
+}
+
 // Basic Object Attributes
 
 #[derive(Debug, Copy, Clone)]
 pub struct Position(pub Vector3<f32>);
 
+impl AsMatrix for Position {
+  fn as_matrix(&self) -> Matrix4<f32> {
+    Matrix4::new(1.0, 0.0, 0.0, self.0.x,
+                 0.0, 1.0, 0.0, self.0.y,
+                 0.0, 0.0, 1.0, self.0.z,
+                 0.0, 0.0, 0.0, 1.0)
+  }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Scale(pub Vector3<f32>);
 
+impl AsMatrix for Scale {
+  fn as_matrix(&self) -> Matrix4<f32> {
+    Matrix4::new(self.0.x, 0.0,      0.0,      0.0,
+                 0.0,      self.0.y, 0.0,      0.0,
+                 0.0,      0.0,      self.0.z, 0.0,
+                 0.0,      0.0,      0.0,      1.0)
+  }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Rotation(pub na::UnitQuaternion<f32>);
+
+impl AsMatrix for Rotation {
+  fn as_matrix(&self) -> Matrix4<f32> {
+    na::to_homogeneous(self.0.to_rotation_matrix().submatrix())
+  }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct Velocity {
@@ -202,13 +230,17 @@ impl RenderSystem {
       let pickable_id = manager.pickables.get(entity);
 
       let model_mat = {
-        let rot = manager.rotations.get(entity).map(|x| *x).unwrap_or(Rotation(na::one()));
-        let sca = manager.scales.get(entity).map(|x| *x).unwrap_or(Scale(na::one()));
-        (Transform {
-          pos:   p.0,
-          rot:   rot.0,
-          scale: sca.0,
-        }).as_matrix()
+        let mut m = p.as_matrix();
+        
+        if let Some(rot) = manager.rotations.get(entity) {
+          m *= rot.as_matrix();
+        }
+        
+        if let Some(sca) = manager.scales.get(entity) {
+          m *= sca.as_matrix();
+        }
+        
+        m
       };
 
       let view_mat = world_uniforms.view_matrix;
