@@ -125,14 +125,14 @@ impl EntityManager {
   }
 }
 
-struct Pickingsystem {
+struct PickingSystem {
   texture: gl::texture::UnsignedTexture2d,
   depth:   gl::framebuffer::DepthRenderBuffer,
   pbo:     gl::texture::pixel_buffer::PixelBuffer<u32>,
   size:    (u32, u32),
 }
 
-impl Pickingsystem {
+impl PickingSystem {
   fn new_buffers<F: gl::backend::Facade>(display: &F, size: (u32, u32))
                                          -> (gl::texture::UnsignedTexture2d, gl::framebuffer::DepthRenderBuffer) {
     let color = gl::texture::UnsignedTexture2d::empty_with_format(display,
@@ -148,7 +148,7 @@ impl Pickingsystem {
 
   fn new<F: gl::backend::Facade+Sized>(display: &F, size: (u32, u32)) -> Self {
     let (color, depth) = Self::new_buffers(display, size);
-    Pickingsystem {
+    PickingSystem {
       texture: color,
       depth: depth,
       pbo: gl::texture::pixel_buffer::PixelBuffer::new_empty(display, 1),
@@ -357,7 +357,7 @@ pub struct World {
   velocity_system: VelocitySystem,
   camera_system: CameraSystem,
   render_system: RenderSystem,
-  picking_system: Pickingsystem,
+  picking_system: PickingSystem,
 
   // TODO: Make an Entity
   pub light: Point3<f32>,
@@ -371,7 +371,7 @@ impl World {
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
       render_system: RenderSystem,
-      picking_system: Pickingsystem::new(display, (800,600)),
+      picking_system: PickingSystem::new(display, (800,600)),
 
       light: na::Point3::new(0.0, 0.0, 0.0),
       mouse_position: None,
