@@ -17,6 +17,7 @@ fn main() {
 
   let mut resources = ResourceManager::new();
   resources.load_obj(&display, "terrain", "terrain.obj");
+  resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
   resources.load_obj(&display, "teapot", "teapot.obj");
   resources.load_obj(&display, "cube", "cube.obj");
   resources.make_axis_object(&display, "axis");
