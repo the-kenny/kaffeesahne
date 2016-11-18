@@ -17,6 +17,7 @@ fn main() {
 
   let mut resources = ResourceManager::new();
   resources.load_obj(&display, "terrain", "terrain.obj");
+  resources.load_obj(&display, "light", "light.obj");
   resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
   resources.load_obj(&display, "teapot", "teapot.obj");
   resources.load_obj(&display, "cube", "cube.obj");
@@ -99,7 +100,7 @@ fn main() {
     world.entities.set_position(light, position);
     world.entities.set_pickable(light, true);
     world.entities.add_geometry(light, Geometry {
-      geometry: "cube",
+      geometry: "light",
       program:  "basic",
     });
     world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));

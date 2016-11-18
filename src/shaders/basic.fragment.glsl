@@ -9,13 +9,15 @@ uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
 
 uniform Material {
-  vec4 surfaceColor;
+  vec4 ambient;
+  vec4 diffuse;
+  vec4 specular;
+  float shininess;
 };
 
-out vec4 color;
+const float lightIntensity = 1.0;
 
-const vec3 lightColor = vec3(1.0, 1.0, 1.0);
-const vec3 ambientColor = vec3(0.1, 0.1, 0.1);
+out vec4 color;
 
 vec3 ambientLighting();
 vec3 diffuseLighting(in vec3 N, in vec3 L);
@@ -29,22 +31,22 @@ void main() {
   vec3 cameraDirection = normalize(cameraPosition - worldPosition.xyz);
 
   color.xyz = specularLighting(normal, lightDirection, cameraDirection)
-    + ambientLighting()
+    // + ambientLighting()
     + diffuseLighting(normal, lightDirection);
-  color.a = surfaceColor.a;
+  color.a = 1.0;                // TODO
 }
 
 vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V) {
    vec3 H = normalize(L + V);
-   float specularTerm = max(pow(dot(N, H), 32.0), 0.0);
-   return surfaceColor.xyz*lightColor*specularTerm;
+   float factor = max(pow(dot(N, H), shininess), 0.0);
+   return specular.xyz*lightIntensity*factor;
 }
 
 vec3 diffuseLighting(in vec3 N, in vec3 L) {
-  float diffuse = max(dot(N, L), 0.0);
-  return surfaceColor.xyz*lightColor*diffuse;
+  float factor = max(dot(N, L), 0.0);
+  return diffuse.xyz*lightIntensity*factor;
 }
 
 vec3 ambientLighting() {
-  return ambientColor;
+  return ambient.xyz*0.1;
 }

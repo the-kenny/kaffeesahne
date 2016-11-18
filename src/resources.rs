@@ -28,22 +28,23 @@ impl ResourceManager {
     }
   }
   
-  pub fn compile_shader<P: AsRef<Path>>(&mut self,
-                                        display: &gl::Display,
-                                        name: &'static str,
-                                        vertex: P,
-                                        fragment: P) {
+  pub fn compile_shader<P>(&mut self,
+                           display: &gl::Display,
+                           name: &'static str,
+                           vertex: P,
+                           fragment: P)
+  where P: AsRef<Path>+fmt::Display {
     use std::fs::File;
     use std::io::Read;
     let vertex_src = {
-      let mut f = File::open(vertex).unwrap();
+      let mut f = File::open(&vertex).unwrap();
       let mut src = String::new();
       f.read_to_string(&mut src).unwrap();
       src
     };
 
     let fragment_src = {
-      let mut f = File::open(fragment).unwrap();
+      let mut f = File::open(&fragment).unwrap();
       let mut src = String::new();
       f.read_to_string(&mut src).unwrap();
       src
@@ -53,6 +54,10 @@ impl ResourceManager {
                                            &vertex_src,
                                            &fragment_src,
                                            None).unwrap();
+
+    println!("compiling shader {}, id: {:?}", name, program);
+    println!("uniform_blocks: {:?}", program.get_uniform_blocks());
+    
     self.programs.insert(name, program);
   }
 
@@ -64,11 +69,13 @@ impl ResourceManager {
     println!("Loading {} from {}", name, path);
     
     let obj = tobj::load_obj(path.as_ref());
-    let (models, _materials) = obj.unwrap();
+    let (models, materials) = obj.unwrap();
 
     // TODO: Use model.name for our name
     let model = &models[0];
     println!("model.name = {}", model.name);
+
+    println!("materials: {:?}", materials);
 
     let mesh = &model.mesh;
     assert!(mesh.positions.len() % 3 == 0);
@@ -124,9 +131,19 @@ impl ResourceManager {
     let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
     let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
-    let material = gl::uniforms::UniformBuffer::new(display, Material {
-      surfaceColor: (1.0, 0.5, 0.0, 1.0),
-    }).unwrap();
+    // let material = gl::uniforms::UniformBuffer::new(display, Material {
+    //   surfaceColor: (1.0, 0.5, 0.0, 1.0),
+    // }).unwrap();
+
+    let material = materials.into_iter().next().map(Material::from).unwrap_or(Material {
+      ambient:   [1.0; 4],
+      diffuse:   [1.0; 4],
+      specular:  [1.0; 4],
+      shininess: 1.0,
+    });
+    let material = gl::uniforms::UniformBuffer::new(display, material.into()).unwrap();
+
+    // println!("buffer layout: {:?}", material.)
 
     self.meshes.insert(name, BufferedMesh {
       positions: positions,
@@ -158,3 +175,16 @@ impl ResourceManager {
   }
 }
 
+impl From<tobj::Material> for Material {
+  fn from(m: tobj::Material) -> Self {
+    let a = m.ambient;
+    let d = m.diffuse;
+    let s = m.specular;
+    Material {
+      ambient:   [a[0], a[1], a[2], 1.0],
+      diffuse:   [d[0], d[1], d[2], 1.0],
+      specular:  [s[0], s[1], s[2], 1.0],
+      shininess: m.shininess,
+    }
+  }
+}

@@ -35,6 +35,14 @@ implement_from!(Normal, normal);
 #[derive(Debug, Clone, Copy)]
 #[allow(non_snake_case)]
 pub struct Material {
-  pub surfaceColor: (f32, f32, f32, f32),
+  pub ambient:   [f32; 4], // Fourth element is needed for padding
+  pub diffuse:   [f32; 4],
+  pub specular:  [f32; 4],
+  pub shininess: f32,
 }
-implement_uniform_block!(Material, surfaceColor);
+
+implement_uniform_block!(Material,
+                         ambient,
+                         diffuse,
+                         specular,
+                         shininess);
