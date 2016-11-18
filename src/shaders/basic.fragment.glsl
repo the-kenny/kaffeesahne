@@ -8,10 +8,13 @@ uniform vec3 cameraPosition;
 uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
 
+uniform Material {
+  vec4 surfaceColor;
+};
+
 out vec4 color;
 
 const vec3 lightColor = vec3(1.0, 1.0, 1.0);
-const vec4 surfaceColor = vec4(1.0, 0.5, 0.0, 1.0);
 const vec3 ambientColor = vec3(0.1, 0.1, 0.1);
 
 vec3 ambientLighting();

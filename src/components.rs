@@ -243,6 +243,7 @@ impl RenderSystem {
       let view_mat = world_uniforms.view_matrix;
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
+      let ref buffers = resources.meshes[&g.geometry];
       let uniforms = uniform! {
         pickingId:        pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
         modelMatrix:      model_mat.as_uniform(),
@@ -252,9 +253,9 @@ impl RenderSystem {
         normalMatrix:     normal_mat.as_uniform(),
         lightPosition:    world_uniforms.light_position.as_uniform(),
         cameraPosition:   world_uniforms.camera_position.as_uniform(),
+        Material:         &buffers.material,
       };
 
-      let ref buffers = resources.meshes[&g.geometry];
       let ref program = resources.programs[&g.program];
       surface.draw((&buffers.positions, &buffers.normals),
                    &buffers.indices,

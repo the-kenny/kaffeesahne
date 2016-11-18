@@ -31,3 +31,10 @@ implement_from!(Vertex, position);
 pub struct Normal { normal: [f32; 3] }
 implement_vertex!(Normal, normal);
 implement_from!(Normal, normal);
+
+#[derive(Debug, Clone, Copy)]
+#[allow(non_snake_case)]
+pub struct Material {
+  pub surfaceColor: (f32, f32, f32, f32),
+}
+implement_uniform_block!(Material, surfaceColor);

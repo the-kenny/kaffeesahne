@@ -12,21 +12,22 @@ pub struct BufferedMesh {
   pub positions: gl::VertexBuffer<Vertex>,
   pub normals:   gl::VertexBuffer<Normal>,
   pub indices:   gl::index::IndexBuffer<u32>,
+  pub material:  gl::uniforms::UniformBuffer<Material>,
 }
 
 pub struct ResourceManager {
-  pub meshes:   HashMap<&'static str, BufferedMesh>,
-  pub programs: HashMap<&'static str, gl::Program>,
+  pub meshes:    HashMap<&'static str, BufferedMesh>,
+  pub programs:  HashMap<&'static str, gl::Program>,
 }
 
 impl ResourceManager {
   pub fn new() -> Self {
     ResourceManager {
-      meshes:   HashMap::new(),
-      programs: HashMap::new(),
+      meshes:    HashMap::new(),
+      programs:  HashMap::new(),
     }
   }
-
+  
   pub fn compile_shader<P: AsRef<Path>>(&mut self,
                                         display: &gl::Display,
                                         name: &'static str,
@@ -123,10 +124,15 @@ impl ResourceManager {
     let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
     let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
+    let material = gl::uniforms::UniformBuffer::new(display, Material {
+      surfaceColor: (1.0, 0.5, 0.0, 1.0),
+    }).unwrap();
+
     self.meshes.insert(name, BufferedMesh {
       positions: positions,
       normals: normals,
       indices: indices,
+      material: material,
     });
   }
 
@@ -146,6 +152,7 @@ impl ResourceManager {
       positions: positions,
       normals: normals,
       indices: indices,
+      material: gl::uniforms::UniformBuffer::empty(display).unwrap(),
     });
 
   }
