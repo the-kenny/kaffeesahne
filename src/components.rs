@@ -231,15 +231,12 @@ impl RenderSystem {
 
       let model_mat = {
         let mut m = p.as_matrix();
-        
-        if let Some(rot) = manager.rotations.get(entity) {
+        manager.rotations.get(entity).map(|rot| {
           m *= rot.as_matrix();
-        }
-        
-        if let Some(sca) = manager.scales.get(entity) {
+        });
+        manager.scales.get(entity).map(|sca| {
           m *= sca.as_matrix();
-        }
-        
+        });
         m
       };
 
