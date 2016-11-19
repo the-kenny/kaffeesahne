@@ -16,6 +16,7 @@ uniform Material {
 };
 
 const float lightIntensity = 1.0;
+const float ambientIntensity = 0.1;
 
 out vec4 color;
 
@@ -31,7 +32,7 @@ void main() {
   vec3 cameraDirection = normalize(cameraPosition - worldPosition.xyz);
 
   color.xyz = specularLighting(normal, lightDirection, cameraDirection)
-    // + ambientLighting()
+    + ambientLighting()
     + diffuseLighting(normal, lightDirection);
   color.a = 1.0;                // TODO
 }
@@ -48,5 +49,5 @@ vec3 diffuseLighting(in vec3 N, in vec3 L) {
 }
 
 vec3 ambientLighting() {
-  return ambient.xyz*0.1;
+  return ambient.xyz*ambientIntensity;
 }
