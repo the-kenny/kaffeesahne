@@ -14,6 +14,9 @@ pub use resources::*;
 mod components;
 pub use components::*;
 
+mod world;
+pub use world::*;
+
 #[derive(Debug, Copy, Clone)]
 pub struct Millis(pub f32);
 
