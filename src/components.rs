@@ -1,7 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use glium as gl;
+use glium::backend::{Context, Facade};
+use std::rc::Rc;
 
 use super::*;
+
+const FAR_PLANE: f32 = 1024.0;
 
 pub type EntityId = u64;
 type EntityMap<K,V> = BTreeMap<K,V>;
@@ -174,7 +178,6 @@ impl PickingSystem {
 
     (color, depth)
   }
-
   
   pub fn read_picking_buffer(&mut self) -> Option<EntityId> {
     // Copy the picking_vbo into main memory and read its value
@@ -199,6 +202,84 @@ impl PickingSystem {
   }
 }
 
+pub struct ShadowSystem {
+  pub cubemap: gl::texture::DepthCubemap,
+  context: Rc<Context>,
+}
+
+impl ShadowSystem {
+  pub fn new<F: Facade>(facade: &F) -> Self {
+    ShadowSystem {
+      cubemap: gl::texture::DepthCubemap::empty(facade, 1024).unwrap(),
+      context: facade.get_context().clone(),
+    }
+  }
+
+  pub fn render(&self,
+                manager:        &EntityManager,
+                resources:      &ResourceManager,
+                world_uniforms: &WorldUniforms) {
+    use glium::texture::CubeLayer::*;
+    use glium::Surface;
+
+    // Just render 6 times. Yolo!
+    for &dir in &[NegativeX, NegativeY, NegativeZ, PositiveX, PositiveY, PositiveZ] {
+      let attachment = self.cubemap.main_level().image(dir);
+      let mut surface = gl::framebuffer::SimpleFrameBuffer::depth_only(&self.context, attachment)
+        .unwrap();
+
+      let ref program = resources.programs["cube_shadows"];
+      surface.clear_depth(1.0);
+
+      let params = gl::DrawParameters {
+        depth: gl::Depth {
+          test: gl::draw_parameters::DepthTest::IfLess,
+          write: true,
+          .. Default::default()
+        },
+        .. Default::default()
+      };
+
+      // Iterate over all entities with geometries
+      for (entity, g) in manager.geometries.iter() {
+        let p = manager.positions[entity];
+
+        let model_mat = {
+          let mut m = p.as_matrix();
+          manager.rotations.get(entity).map(|rot| {
+            m *= rot.as_matrix();
+          });
+          manager.scales.get(entity).map(|sca| {
+            m *= sca.as_matrix();
+          });
+          m
+        };
+
+        let light_position = world_uniforms.light_position;
+        let view_mat: na::Matrix4<f32> = na::to_homogeneous(
+          &na::Isometry3::look_at_rh(&-light_position,
+                                     &na::Point3::new(0.0, 0.0, 0.0),
+                                     &na::Vector3::new(0.0, 1.0, 0.0)));
+        
+        let uniforms = uniform! {
+          modelMatrix:      model_mat.as_uniform(),
+          viewMatrix:       view_mat.as_uniform(),
+          lightPosition:    light_position.as_uniform(),
+          farPlane:         FAR_PLANE,
+        };
+        
+        let ref buffers = resources.meshes[&g.geometry];        
+        surface.draw((&buffers.positions, &buffers.normals),
+                     &buffers.indices,
+                     program,
+                     &uniforms,
+                     &params)
+          .unwrap();
+      }
+    }
+  }
+}
+
 pub struct RenderSystem;
 
 impl RenderSystem {
@@ -206,6 +287,7 @@ impl RenderSystem {
                        manager: &EntityManager,
                        surface: &mut S,
                        picking_surface: Option<&mut PS>,
+                       depth_map: &gl::texture::DepthCubemap,
                        // TODO: Pass via `World`
                        resources: &ResourceManager,
                        world_uniforms: &WorldUniforms)
@@ -243,7 +325,7 @@ impl RenderSystem {
 
       let view_mat = world_uniforms.view_matrix;
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
-
+      
       let ref buffers = resources.meshes[&g.geometry];
       let uniforms = uniform! {
         pickingId:        pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
@@ -254,6 +336,8 @@ impl RenderSystem {
         lightPosition:    world_uniforms.light_position.as_uniform(),
         cameraPosition:   world_uniforms.camera_position.as_uniform(),
         Material:         &buffers.material,
+        shadows:          depth_map,
+        farPlane:         FAR_PLANE,
       };
 
       let ref program = resources.programs[&g.program];

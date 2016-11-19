@@ -36,12 +36,13 @@ void main() {
   vec3 cameraDirection = normalize(cameraPosition - worldPosition.xyz);
   float shadow = shadowStrength();                      
     
-  color.xyz = (specularLighting(normal, lightDirection, cameraDirection)
-    + ambientLighting()
-    + diffuseLighting(normal, lightDirection))
-    * (1.0 - shadow);
+  // color.xyz = (specularLighting(normal, lightDirection, cameraDirection)
+  //   + ambientLighting()
+  //   + diffuseLighting(normal, lightDirection))
+  //   * (1.0 - shadow);
+  // color.a = 1.0;                // TODO
 
-  color.a = 1.0;                // TODO
+  color = vec4(texture(depthMap, fragVert).r);
 }
 
 vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V) {
@@ -72,6 +73,5 @@ float shadowStrength() {
   float bias = 0.05; 
   float shadow = (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
 
-  // return shadow;
-  return 1.0 - texture(depthMap, fragToLight).r;
+  return shadow;
 }  
