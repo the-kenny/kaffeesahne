@@ -6,11 +6,14 @@ in vec3 normal;
 out vec3 fragNormal;
 out vec3 fragVert;
 
+uniform mat4 modelMatrix;
+uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
-uniform mat4 modelViewMatrix;
 
 void main() {
   fragNormal = normal;
   fragVert = position;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+  mat4 modelViewProject = projectionMatrix * viewMatrix * modelMatrix;
+  gl_Position = modelViewProject * vec4(position, 1.0);
 }

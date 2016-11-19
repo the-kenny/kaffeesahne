@@ -248,9 +248,8 @@ impl RenderSystem {
       let uniforms = uniform! {
         pickingId:        pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
         modelMatrix:      model_mat.as_uniform(),
-        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
         viewMatrix:       view_mat.as_uniform(),
-        modelViewMatrix:  (view_mat * model_mat).as_uniform(),
+        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
         normalMatrix:     normal_mat.as_uniform(),
         lightPosition:    world_uniforms.light_position.as_uniform(),
         cameraPosition:   world_uniforms.camera_position.as_uniform(),
