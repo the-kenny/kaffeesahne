@@ -131,20 +131,19 @@ fn main() {
     world.draw(&mut target, &resources);
     target.finish().unwrap();
 
-    if let Some(pick) = world.entities.picked_entity {
-      println!("{:?}", pick);
-    }
-
-    // TODO: How to handle these events? Picking with vsync still fucks up
     for ev in display.poll_events() {
       use glium::glutin::*;
       match ev {
         Event::Closed => return,
         Event::MouseInput(ElementState::Pressed, _) => {
-          camera_idx = (camera_idx+1) % camera_positions.len();
-          let pos = camera_positions[camera_idx];
-          println!("camera: {:?}", pos);
-          world.entities.set_position(camera, pos);
+          // camera_idx = (camera_idx+1) % camera_positions.len();
+          // let pos = camera_positions[camera_idx];
+          // println!("camera: {:?}", pos);
+          // world.entities.set_position(camera, pos);
+
+          if let Some(e) = world.entities.picked_entity {
+            println!("Entity: {}", e);
+          }
         },
         Event::MouseMoved(x,y) => {
           world.mouse_position = Some((x as u32, y as u32));
