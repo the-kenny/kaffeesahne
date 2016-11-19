@@ -53,7 +53,7 @@ pub trait AsUniform<T>
   where Self: Sized+AsRef<T>, T: Clone {
   fn as_uniform(&self) -> T {
     let t: &T = self.as_ref();
-    (*t).clone()
+    t.clone()
   }
 }
 
