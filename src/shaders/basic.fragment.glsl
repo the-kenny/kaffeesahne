@@ -2,6 +2,7 @@
 
 in vec3 fragNormal;
 in vec3 fragVert;
+in vec2 fragUv;
 
 uniform vec3 lightPosition;
 uniform vec3 cameraPosition;
@@ -36,7 +37,6 @@ void main() {
     + diffuseLighting(normal, lightDirection);
   color.a = 1.0;                // TODO
 }
-
 vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V) {
    vec3 H = normalize(L + V);
    float factor = max(pow(dot(N, H), shininess), 0.0);

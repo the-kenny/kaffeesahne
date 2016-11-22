@@ -124,16 +124,20 @@ impl ResourceManager {
     println!("indices.len: {}", indices.len());
     println!("normals.len: {}", normals.len());
 
-    let vertices: Vec<_> = vertices.into_iter().map(Vertex::from).collect();
-    let normals:  Vec<_> = normals.into_iter().map(Normal::from).collect();
+    let mut vertices: Vec<_> = vertices.into_iter().map(Vertex::from).collect();
+    let normals: Vec<_> = normals.into_iter().map(Normal::from).collect();
+
+    if mesh.texcoords.len() > 0 {
+      println!("Got {} texture coordinages", mesh.texcoords.len());
+      for f in 0..mesh.texcoords.len()/2 {
+        vertices[f].uv = [mesh.texcoords[f*2],
+                          mesh.texcoords[f*2 + 1]];
+      }
+    }
     
     let positions = gl::VertexBuffer::new(display, &vertices).unwrap();
     let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
     let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
-
-    // let material = gl::uniforms::UniformBuffer::new(display, Material {
-    //   surfaceColor: (1.0, 0.5, 0.0, 1.0),
-    // }).unwrap();
 
     let material = materials.into_iter().next().map(Material::from).unwrap_or(Material {
       ambient:   [1.0; 4],

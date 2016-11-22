@@ -22,12 +22,36 @@ macro_rules! implement_from {
   };
 }
 
-#[derive(Clone, Copy)]
-pub struct Vertex { position: [f32; 3] }
-implement_vertex!(Vertex, position);
-implement_from!(Vertex, position);
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex {
+  pub position: [f32; 3],
+  pub uv: [f32; 2],
+}
+implement_vertex!(Vertex, position, uv);
+// implement_from!(Vertex, position);
 
-#[derive(Clone, Copy)]
+impl From<na::Vector3<f32>> for Vertex {
+  fn from(v: na::Vector3<f32>) -> Self {
+    Vertex::new(v.x, v.y, v.z)
+  }
+}
+
+impl From<(f32, f32, f32)> for Vertex {
+  fn from((x, y, z): (f32, f32, f32)) -> Self {
+    Vertex::new(x, y, z)
+  }
+}
+
+impl Vertex {
+  fn new(x: f32, y: f32, z: f32) -> Self {
+    Vertex {
+      position: [x, y, z],
+      uv: [0.0; 2],
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Normal { normal: [f32; 3] }
 implement_vertex!(Normal, normal);
 implement_from!(Normal, normal);
