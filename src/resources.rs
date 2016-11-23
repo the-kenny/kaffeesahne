@@ -1,10 +1,13 @@
 extern crate tobj;
+extern crate image;
 
 use std::collections::HashMap;
 use glium as gl;
 use nalgebra as na;
 use super::geometry::*;
 
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::fmt;
 
@@ -13,6 +16,7 @@ pub struct BufferedMesh {
   pub normals:   gl::VertexBuffer<Normal>,
   pub indices:   gl::index::IndexBuffer<u32>,
   pub material:  gl::uniforms::UniformBuffer<Material>,
+  pub texture:   Option<gl::texture::SrgbTexture2d>, // TODO: Use `String`
 }
 
 pub struct ResourceManager {
@@ -27,7 +31,7 @@ impl ResourceManager {
       programs:  HashMap::new(),
     }
   }
-  
+
   pub fn compile_shader<P>(&mut self,
                            display: &gl::Display,
                            name: &'static str,
@@ -55,9 +59,8 @@ impl ResourceManager {
                                            &fragment_src,
                                            None).unwrap();
 
-    println!("compiling shader {}, id: {:?}", name, program);
-    println!("uniform_blocks: {:?}", program.get_uniform_blocks());
-    
+    println!("compiling shader {:?}, id: {:?}", name, program);
+
     self.programs.insert(name, program);
   }
 
@@ -67,15 +70,13 @@ impl ResourceManager {
                      path: P)
     where P: AsRef<Path>+fmt::Display {
     println!("Loading {} from {}", name, path);
-    
+
     let obj = tobj::load_obj(path.as_ref());
     let (models, materials) = obj.unwrap();
 
     // TODO: Use model.name for our name
     let model = &models[0];
     println!("model.name = {}", model.name);
-
-    println!("materials: {:?}", materials);
 
     let mesh = &model.mesh;
     assert!(mesh.positions.len() % 3 == 0);
@@ -134,26 +135,44 @@ impl ResourceManager {
                           mesh.texcoords[f*2 + 1]];
       }
     }
-    
+
     let positions = gl::VertexBuffer::new(display, &vertices).unwrap();
     let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
     let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
-    let material = materials.into_iter().next().map(Material::from).unwrap_or(Material {
-      ambient:   [1.0; 4],
-      diffuse:   [1.0; 4],
-      specular:  [1.0; 4],
-      shininess: 1.0,
-    });
-    let material = gl::uniforms::UniformBuffer::new(display, material.into()).unwrap();
+    let (material, texture) = {
+      if let Some(material) = materials.into_iter().next() {
+        let texture = {
+          File::open(&material.diffuse_texture).ok()
+            .and_then(|file| image::load(BufReader::new(file), image::PNG).ok())
+            .map(|image| image.to_rgba())
+            .map(|image| {
+              let size = image.dimensions();
+              println!("Loaded {} with size {:?}", material.diffuse_texture, size);
+              let image = gl::texture::RawImage2d::from_raw_rgba_reversed(image.into_raw(), size);
+              gl::texture::SrgbTexture2d::new(display, image).unwrap()
+            })
+        };
+        (Material::from(material), texture)
+      } else {
+        (Material {
+          ambient:   [1.0; 4],
+          diffuse:   [1.0; 4],
+          specular:  [1.0; 4],
+          shininess: 1.0,
+        }, None)
+      }
 
-    // println!("buffer layout: {:?}", material.)
+    };
+
+    let material = gl::uniforms::UniformBuffer::new(display, material.into()).unwrap();
 
     self.meshes.insert(name, BufferedMesh {
       positions: positions,
       normals: normals,
       indices: indices,
       material: material,
+      texture: texture,
     });
   }
 
@@ -174,6 +193,7 @@ impl ResourceManager {
       normals: normals,
       indices: indices,
       material: gl::uniforms::UniformBuffer::empty(display).unwrap(),
+      texture: None
     });
 
   }

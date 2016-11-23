@@ -30,7 +30,7 @@ impl World {
       entities: EntityManager::default(),
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
-      render_system: RenderSystem,
+      render_system: RenderSystem::new(display),
       picking_system: PickingSystem::new(display, (800,600)),
 
       light: na::Point3::new(0.0, 0.0, 0.0),

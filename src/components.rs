@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use glium as gl;
+use glium::backend::Facade;
 
 use super::*;
 
@@ -175,7 +176,7 @@ impl PickingSystem {
     (color, depth)
   }
 
-  
+
   pub fn read_picking_buffer(&mut self) -> Option<EntityId> {
     // Copy the picking_vbo into main memory and read its value
     self.pbo.read().ok().and_then(|px| {
@@ -199,9 +200,17 @@ impl PickingSystem {
   }
 }
 
-pub struct RenderSystem;
+pub struct RenderSystem {
+  empty_texture: gl::texture::SrgbTexture2d,
+}
 
 impl RenderSystem {
+  pub fn new<F: Facade>(f: &F) -> Self {
+    RenderSystem {
+      empty_texture: gl::texture::SrgbTexture2d::empty(f, 0, 0).unwrap()
+    }
+  }
+
   pub fn render<S, PS>(&self,
                        manager: &EntityManager,
                        surface: &mut S,
@@ -245,18 +254,24 @@ impl RenderSystem {
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
       let ref buffers = resources.meshes[&g.geometry];
+
       let uniforms = uniform! {
-        pickingId:        pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
-        modelMatrix:      model_mat.as_uniform(),
-        viewMatrix:       view_mat.as_uniform(),
-        projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
-        normalMatrix:     normal_mat.as_uniform(),
-        lightPosition:    world_uniforms.light_position.as_uniform(),
-        cameraPosition:   world_uniforms.camera_position.as_uniform(),
-        Material:         &buffers.material,
+        pickingId:         pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
+        modelMatrix:       model_mat.as_uniform(),
+        normalMatrix:      normal_mat.as_uniform(),
+        Material:          &buffers.material,
+        diffuseTexture:    buffers.texture.as_ref().unwrap_or(&self.empty_texture),
+        hasDiffuseTexture: buffers.texture.is_some(),
+
+        viewMatrix:        view_mat.as_uniform(),
+        projectionMatrix:  world_uniforms.projection_matrix.as_uniform(),
+        lightPosition:     world_uniforms.light_position.as_uniform(),
+        cameraPosition:    world_uniforms.camera_position.as_uniform(),
       };
 
       let ref program = resources.programs[&g.program];
+
+
       surface.draw((&buffers.positions, &buffers.normals),
                    &buffers.indices,
                    program,
@@ -341,4 +356,3 @@ impl CameraSystem {
     }
   }
 }
-

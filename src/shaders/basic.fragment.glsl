@@ -9,6 +9,9 @@ uniform vec3 cameraPosition;
 uniform mat3 normalMatrix;
 uniform mat4 modelMatrix;
 
+uniform bool hasDiffuseTexture;
+uniform sampler2D diffuseTexture;
+
 uniform Material {
   vec4 ambient;
   vec4 diffuse;
@@ -44,6 +47,9 @@ vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V) {
 }
 
 vec3 diffuseLighting(in vec3 N, in vec3 L) {
+  vec4 diffuse = int(hasDiffuseTexture) * texture(diffuseTexture, fragUv)
+    + int(!hasDiffuseTexture) * diffuse;
+
   float factor = max(dot(N, L), 0.0);
   return diffuse.xyz*lightIntensity*factor;
 }
