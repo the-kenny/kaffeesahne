@@ -1,4 +1,4 @@
- use nalgebra as na;
+use nalgebra as na;
 use glium as gl;
 
 use super::components::*;
@@ -52,13 +52,11 @@ impl World {
                                  &self.entities.cameras[&camera].target,
                                  &na::Vector3::new(0.0, 1.0, 0.0)));
 
-    // Something is wrong hree - perspective doesn't look right
+    // Something is wrong here - perspective doesn't look right
     let projection_mat = {
       let ratio    = width as f32 / height as f32;
-      let fov: f32 = 3.141592 / 3.0;
-      let zfar     = 1024.0;
-      let znear    = 0.1;
-
+      let fov: f32 = 3.141592 / (360.0 / 75.0);
+      let (znear, zfar) = (0.1, 1024.0);
       na::PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix()
     };
 
