@@ -140,7 +140,7 @@ impl ResourceManager {
     let normals   = gl::VertexBuffer::new(display, &normals).unwrap();
     let indices   = gl::index::IndexBuffer::new(display, gl::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
-    let (material, texture) = {
+    let (mut material, texture) = {
       if let Some(material) = materials.into_iter().next() {
         let texture = {
           File::open(&material.diffuse_texture).ok()
@@ -162,17 +162,19 @@ impl ResourceManager {
           shininess: 1.0,
         }, None)
       }
-
     };
+
+    // Override ambient color as Blender only exports white.
+    material.ambient = [0.0; 4];
 
     let material = gl::uniforms::UniformBuffer::new(display, material.into()).unwrap();
 
     self.meshes.insert(name, BufferedMesh {
       positions: positions,
-      normals: normals,
-      indices: indices,
-      material: material,
-      texture: texture,
+      normals:   normals,
+      indices:   indices,
+      material:  material,
+      texture:   texture,
     });
   }
 
