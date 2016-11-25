@@ -279,7 +279,7 @@ impl RenderSystem {
                    &params)
         .unwrap();
 
-      if pickable_id.is_some() {
+      if pickable_id.is_some() && picking_surface.is_some() {
         pick_items.push((&buffers.positions,
                          &buffers.indices,
                          uniforms));
