@@ -200,6 +200,13 @@ impl PickingSystem {
   }
 }
 
+pub struct WorldUniforms {
+  pub projection_matrix: na::Matrix4<f32>,
+  pub light_position:    na::Point3<f32>,
+  pub camera_matrix:     na::Matrix4<f32>,
+  pub camera_position:   na::Point3<f32>,
+}
+
 pub struct RenderSystem {
   empty_texture: gl::texture::SrgbTexture2d,
 }
@@ -250,7 +257,7 @@ impl RenderSystem {
         m
       };
 
-      let view_mat = world_uniforms.view_matrix;
+      let view_mat = world_uniforms.camera_matrix;
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
       let ref buffers = resources.meshes[&g.geometry];
@@ -304,7 +311,7 @@ impl RenderSystem {
     {
       let uniforms = uniform! {
         projectionMatrix: world_uniforms.projection_matrix.as_uniform(),
-        viewMatrix:       world_uniforms.view_matrix.as_uniform(),
+        viewMatrix:       world_uniforms.camera_matrix.as_uniform(),
       };
 
       let ref buffers = resources.meshes["axis"];

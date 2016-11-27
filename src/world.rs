@@ -4,13 +4,6 @@ use glium as gl;
 use super::components::*;
 use super::{Millis, ResourceManager};
 
-pub struct WorldUniforms {
-  pub projection_matrix: na::Matrix4<f32>,
-  pub view_matrix:       na::Matrix4<f32>,
-  pub light_position:    na::Point3<f32>,
-  pub camera_position:   na::Point3<f32>,
-}
-
 pub struct World {
   pub entities: EntityManager,
 
@@ -47,7 +40,7 @@ impl World {
       .expect("Scene doesn't contain a camera!");
 
     let camera_position = self.entities.positions[&camera].0.as_point();
-    let view_mat: na::Matrix4<f32> = na::to_homogeneous(
+    let camera_mat: na::Matrix4<f32> = na::to_homogeneous(
       &na::Isometry3::look_at_rh(&camera_position,
                                  &self.entities.cameras[&camera].target,
                                  &na::Vector3::new(0.0, 1.0, 0.0)));
@@ -62,8 +55,8 @@ impl World {
 
     WorldUniforms {
       projection_matrix: projection_mat,
-      view_matrix:       view_mat,
       light_position:    self.light,
+      camera_matrix:     camera_mat,
       camera_position:   *camera_position,
     }
   }
