@@ -4,7 +4,7 @@ use glium::backend::Facade;
 
 use super::*;
 
-pub type EntityId = u64;
+pub type EntityId = u32;
 type EntityMap<K,V> = BTreeMap<K,V>;
 
 pub trait AsMatrix {
@@ -61,7 +61,7 @@ pub struct Geometry {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Pickable(pub u32);
+pub struct Pickable(pub EntityId);
 
 #[derive(Debug)]
 pub struct Camera {
@@ -117,9 +117,8 @@ impl EntityManager {
   }
 
   pub fn set_pickable(&mut self, entity: EntityId, enable: bool) {
-    assert!(entity <= u32::max_value() as u64);
     if enable {
-      self.pickables.insert(entity, Pickable(entity as u32));
+      self.pickables.insert(entity, Pickable(entity));
     } else {
       self.pickables.remove(&entity);
     }
@@ -180,7 +179,7 @@ impl PickingSystem {
   pub fn read_picking_buffer(&mut self) -> Option<EntityId> {
     // Copy the picking_vbo into main memory and read its value
     self.pbo.read().ok().and_then(|px| {
-      if px[0] > 0 { Some(px[0] as u64) } else { None }
+      if px[0] > 0 { Some(px[0]) } else { None }
     })
   }
 
