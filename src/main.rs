@@ -15,33 +15,29 @@ fn main() {
 
   let mut world = World::new(&display);
 
-  let mut resources = ResourceManager::new();
-  resources.load_obj(&display, "terrain", "terrain.obj");
-  resources.load_obj(&display, "light", "light.obj");
-  resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
-  resources.load_obj(&display, "teapot", "teapot.obj");
-  resources.load_obj(&display, "cube", "cube.obj");
-  resources.make_axis_object(&display, "axis");
+  {
+    let mut resources = &mut world.resources;
+    resources.load_obj(&display, "terrain", "terrain.obj");
+    resources.load_obj(&display, "light", "light.obj");
+    resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
+    resources.load_obj(&display, "teapot", "teapot.obj");
+    resources.load_obj(&display, "cube", "cube.obj");
+    resources.make_axis_object(&display, "axis");
 
-  resources.compile_shader(&display,
-                           "basic",
-                           "src/shaders/basic.vertex.glsl",
-                           "src/shaders/basic.fragment.glsl");
-  // TODO: Move to RenderSystem
-  resources.compile_shader(&display,
-                           "picking",
-                           "src/shaders/picking.vertex.glsl",
-                           "src/shaders/picking.fragment.glsl");
-  resources.compile_shader(&display,
-                           "axis",
-                           "src/shaders/axis.vertex.glsl",
-                           "src/shaders/axis.fragment.glsl");
-
-  let camera_positions = [Position(Vector3::new(0.0, 1.5, -3.0)),
-                          Position(Vector3::new(3.0, 1.5, 0.0)),
-                          Position(Vector3::new(0.0, 1.5, 3.0)),
-                          Position(Vector3::new(-3.0, 1.5, 0.0))];
-  let mut camera_idx: usize = 0;
+    resources.compile_shader(&display,
+                             "basic",
+                             "src/shaders/basic.vertex.glsl",
+                             "src/shaders/basic.fragment.glsl");
+    // TODO: Move to RenderSystem
+    resources.compile_shader(&display,
+                             "picking",
+                             "src/shaders/picking.vertex.glsl",
+                             "src/shaders/picking.fragment.glsl");
+    resources.compile_shader(&display,
+                             "axis",
+                             "src/shaders/axis.vertex.glsl",
+                             "src/shaders/axis.fragment.glsl");
+  }
 
   let terrain = world.entities.new_entity();
   {
@@ -111,7 +107,7 @@ fn main() {
     target: Point3::new(0.0, 0.0, 0.0),
     tracking: None,
   });
-  world.entities.set_position(camera, camera_positions[camera_idx]);
+  world.entities.set_position(camera, Position(Vector3::new(0.5, 2.0, -3.0)));
 
   let ms_per_update = Duration::new(0, 1000000000/60);
   let mut previous = Instant::now();
@@ -128,7 +124,7 @@ fn main() {
     }
 
     let mut target = display.draw();
-    world.draw(&mut target, &resources);
+    world.draw(&mut target);
     target.finish().unwrap();
 
     for ev in display.poll_events() {

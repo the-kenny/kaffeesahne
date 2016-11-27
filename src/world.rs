@@ -5,6 +5,7 @@ use super::components::*;
 use super::{Millis, ResourceManager};
 
 pub struct World {
+  pub resources: ResourceManager,
   pub entities: EntityManager,
 
   // TODO: Make an Entity
@@ -20,7 +21,9 @@ pub struct World {
 impl World {
   pub fn new<F: gl::backend::Facade+Sized>(display: &F) -> Self {
     World {
+      resources: ResourceManager::new(),
       entities: EntityManager::default(),
+
       velocity_system: VelocitySystem,
       camera_system: CameraSystem,
       render_system: RenderSystem::new(display),
@@ -71,10 +74,7 @@ impl World {
     self.camera_system.run(&mut self.entities, delta);
   }
 
-  pub fn draw<S>(&mut self,
-                 surface: &mut S,
-                 // TODO: Pass via `World`
-                 resources: &ResourceManager)
+  pub fn draw<S>(&mut self, surface: &mut S)
     where S: gl::Surface {
     let surface_size = surface.get_dimensions();
 
@@ -87,7 +87,7 @@ impl World {
     self.render_system.render(&self.entities,
                               surface,
                               Some(&mut picking_surface),
-                              resources,
+                              &self.resources,
                               &world_uniforms);
 
     if let Some(pos) = self.mouse_position {
