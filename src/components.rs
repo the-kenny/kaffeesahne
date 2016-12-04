@@ -208,12 +208,14 @@ pub struct WorldUniforms {
 
 pub struct RenderSystem {
   empty_texture: gl::texture::SrgbTexture2d,
+  pub render_wireframe: bool,
 }
 
 impl RenderSystem {
   pub fn new<F: Facade>(f: &F) -> Self {
     RenderSystem {
-      empty_texture: gl::texture::SrgbTexture2d::empty(f, 0, 0).unwrap()
+      empty_texture: gl::texture::SrgbTexture2d::empty(f, 0, 0).unwrap(),
+      render_wireframe: false,
     }
   }
 
@@ -226,14 +228,18 @@ impl RenderSystem {
                        world_uniforms: &WorldUniforms)
     where S: gl::Surface, PS: gl::Surface {
     // TODO: Pull out somewhere
-    let params = gl::DrawParameters {
+    let mut params = gl::DrawParameters {
       depth: gl::Depth {
         test: gl::draw_parameters::DepthTest::IfLess,
         write: true,
-        .. Default::default()
+        ..Default::default()
       },
-      .. Default::default()
+      ..Default::default()
     };
+
+    if self.render_wireframe {
+      params.polygon_mode = gl::PolygonMode::Line;
+    }
 
     // Clear Buffers
     surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);

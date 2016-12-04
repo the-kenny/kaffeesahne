@@ -146,6 +146,10 @@ fn main() {
         },
         Event::Focused(false) => {
           world.mouse_position = None;
+        },
+        // Toggle wireframe with `w`
+        Event::KeyboardInput(ElementState::Pressed, 25, _) => {
+          world.toggle_wireframe();
         }
         _ => (),
       }

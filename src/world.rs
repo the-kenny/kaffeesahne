@@ -94,4 +94,8 @@ impl World {
       self.picking_system.update(pos);
     }
   }
+
+  pub fn toggle_wireframe(&mut self) {
+    self.render_system.render_wireframe = !self.render_system.render_wireframe;
+  }
 }
