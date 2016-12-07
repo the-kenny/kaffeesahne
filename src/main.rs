@@ -1,6 +1,7 @@
 #[macro_use] extern crate glium;
 extern crate kaffeesahne;
 
+use std::f32::consts;
 use glium as gl;
 use kaffeesahne::*;
 use std::time::{Duration,Instant};
@@ -40,13 +41,11 @@ fn main() {
 
   let terrain = world.entities.new_entity();
   {
-    let position = Position(Vector3::new(0.0, 0.0, 0.0));
-    world.entities.set_position(terrain, position);
+    world.entities.set_position(terrain, Vector3::new(0.0, 0.0, 0.0));
     world.entities.add_geometry(terrain, Geometry {
       geometry: "terrain",
       program:  "basic",
     });
-    // world.entities.set_scale(terrain, Scale(na::one::<na::Vector3<f32>>()));
     world.entities.set_pickable(terrain, true);
     // world.entities.velocities.insert(terrain, Velocity {
     //   linear: Vector3::new(0.0, 0.0, 0.0),
@@ -65,6 +64,21 @@ fn main() {
       program:  "basic",
     });
     world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));
+  }
+
+
+  {
+    let cube = world.entities.new_entity();
+    world.entities.set_position(cube, Vector3::new(0.0, 0.75, 0.0));
+    world.entities.add_geometry(cube, Geometry {
+      geometry: "cube",
+      program:  "basic",
+    });
+    world.entities.set_pickable(cube, true);
+    world.entities.velocities.insert(cube, Velocity {
+      linear: na::zero(),
+      angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
+    });
   }
 
   let camera = world.entities.new_entity();
@@ -88,10 +102,10 @@ fn main() {
       lag -= ms_per_update;
     }
 
+    world.handle_events(display.poll_events());
+
     let mut target = display.draw();
     world.draw(&mut target);
     target.finish().unwrap();
-
-    world.handle_events(display.poll_events());
   }
 }

@@ -25,6 +25,12 @@ impl AsMatrix for Position {
   }
 }
 
+impl From<na::Vector3<f32>> for Position {
+  fn from(o: na::Vector3<f32>) -> Self {
+    Position(o)
+  }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Scale(pub Vector3<f32>);
 
@@ -34,6 +40,12 @@ impl AsMatrix for Scale {
                  0.0,      self.0.y, 0.0,      0.0,
                  0.0,      0.0,      self.0.z, 0.0,
                  0.0,      0.0,      0.0,      1.0)
+  }
+}
+
+impl From<na::Vector3<f32>> for Scale {
+  fn from(o: na::Vector3<f32>) -> Self {
+    Scale(o)
   }
 }
 
@@ -100,16 +112,16 @@ impl EntityManager {
     self.geometries.insert(entity, g);
   }
 
-  pub fn set_position(&mut self, entity: EntityId, p: Position) {
-    self.positions.insert(entity, p);
+  pub fn set_position<P: Into<Position>>(&mut self, entity: EntityId, p: P) {
+    self.positions.insert(entity, p.into());
   }
 
   pub fn add_camera(&mut self, entity: EntityId, camera: Camera) {
     self.cameras.insert(entity, camera);
   }
 
-  pub fn set_scale(&mut self, entity: EntityId, scale: Scale) {
-    self.scales.insert(entity, scale);
+  pub fn set_scale<S: Into<Scale>>(&mut self, entity: EntityId, scale: S) {
+    self.scales.insert(entity, scale.into());
   }
 
   pub fn set_rotation(&mut self, entity: EntityId, rot: Rotation) {
