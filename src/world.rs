@@ -74,6 +74,7 @@ impl World {
       self.picking_system.read_picking_buffer()
     });
 
+    BobSystem::run(&mut self.entities, delta);
     self.velocity_system.run(&mut self.entities, delta);
     self.camera_system.run(&mut self.entities, delta);
   }

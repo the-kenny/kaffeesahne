@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use glium as gl;
 use glium::backend::Facade;
+use std::f32::consts;
 
 use super::*;
 
@@ -93,6 +94,7 @@ pub struct EntityManager {
   pub geometries: EntityMap<EntityId, Geometry>,
   pub pickables:  EntityMap<EntityId, Pickable>,
   pub cameras:    EntityMap<EntityId, Camera>,
+  pub bobs:       EntityMap<EntityId, Bob>,
 
   pub picked_entity: Option<EntityId>,
 }
@@ -377,6 +379,42 @@ impl CameraSystem {
       if let Some(target) = camera.tracking {
         camera.target = manager.positions[&target].0.to_point();
       }
+    }
+  }
+}
+
+#[derive(Debug)]
+pub struct Bob {
+  pub period: Millis,
+  pub direction: Vector3<f32>,
+  pub state: Millis,
+}
+
+impl Bob {
+  pub fn new(period: Millis, direction: Vector3<f32>) -> Self {
+    Bob {
+      period: period,
+      direction: direction,
+      state: Millis(0.0),
+    }
+  }
+}
+
+pub struct BobSystem;
+impl BobSystem {
+  pub fn run(manager: &mut EntityManager, delta: Millis) {
+    for (entity, mut bob) in manager.bobs.iter_mut() {
+      // Update new Bob state
+      bob.state += delta;
+      if bob.state.as_millis() >= bob.period.as_millis() {
+        bob.state -= bob.period;
+      }
+      // Calculate current position in Sine curve
+      let sine = ((bob.state.as_millis() / bob.period.as_millis()) * 2.0 * consts::PI).sin();
+      // Calculate position-delta (direction*sine scaled by delta-t)
+      let td = delta.as_millis() / bob.period.as_millis();
+      let pd = sine * td * bob.direction;
+      manager.positions.get_mut(&entity).unwrap().0 += pd;
     }
   }
 }
