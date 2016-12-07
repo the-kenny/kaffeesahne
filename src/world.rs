@@ -12,8 +12,6 @@ pub struct World {
   pub light:          na::Point3<f32>,
   pub mouse_position: Option<(u32, u32)>,
 
-  velocity_system: VelocitySystem,
-  camera_system:   CameraSystem,
   render_system:   RenderSystem,
   picking_system:  PickingSystem,
 }
@@ -24,8 +22,6 @@ impl World {
       resources: ResourceManager::new(),
       entities: EntityManager::default(),
 
-      velocity_system: VelocitySystem,
-      camera_system: CameraSystem,
       render_system: RenderSystem::new(display),
       picking_system: PickingSystem::new(display, (800,600)),
 
@@ -75,8 +71,8 @@ impl World {
     });
 
     BobSystem::run(&mut self.entities, delta);
-    self.velocity_system.run(&mut self.entities, delta);
-    self.camera_system.run(&mut self.entities, delta);
+    VelocitySystem::run(&mut self.entities, delta);
+    CameraSystem::run(&mut self.entities, delta);
   }
 
   pub fn draw<S>(&mut self, surface: &mut S)

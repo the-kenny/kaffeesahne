@@ -348,8 +348,7 @@ impl RenderSystem {
 #[derive(Default)]
 pub struct VelocitySystem;
 impl VelocitySystem {
-  // TODO: Move to trait
-  pub fn run(&self, manager: &mut EntityManager, delta: Millis) {
+  pub fn run(manager: &mut EntityManager, delta: Millis) {
     for (entity, velocity) in manager.velocities.iter() {
       let delta = delta.as_seconds();
       // Update component.position
@@ -374,7 +373,7 @@ impl VelocitySystem {
 
 pub struct CameraSystem;
 impl CameraSystem {
-  pub fn run(&self, manager: &mut EntityManager, _delta: Millis) {
+  pub fn run(manager: &mut EntityManager, _delta: Millis) {
     for (_, camera) in manager.cameras.iter_mut() {
       if let Some(target) = camera.tracking {
         camera.target = manager.positions[&target].0.to_point();
