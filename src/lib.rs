@@ -1,6 +1,9 @@
 #[macro_use] extern crate glium;
 pub extern crate nalgebra;
 
+#[macro_use] extern crate newtype_derive;
+#[macro_use] extern crate custom_derive;
+
 pub use nalgebra as na;
 pub use nalgebra::{Vector3, Vector4, UnitQuaternion, Matrix3, Matrix4, Transpose, PerspectiveMatrix3, Isometry3, Point3};
 use std::time::Duration;
@@ -17,8 +20,12 @@ pub use components::*;
 mod world;
 pub use world::*;
 
-#[derive(Debug, Copy, Clone)]
-pub struct Millis(pub f32);
+custom_derive! {
+  #[derive(Debug, Copy, Clone,
+           NewtypeAdd, NewtypeSub,
+           NewtypeAddAssign, NewtypeSubAssign)]
+  pub struct Millis(pub f32);
+}
 
 impl Millis {
   pub fn as_seconds(&self) -> f32 {
