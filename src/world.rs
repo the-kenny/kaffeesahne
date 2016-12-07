@@ -64,6 +64,10 @@ impl World {
     }
   }
 
+  pub fn toggle_wireframe(&mut self) {
+    self.render_system.render_wireframe = !self.render_system.render_wireframe;
+  }
+
   pub fn update(&mut self, delta: Millis) {
     // Update picked entity
     self.entities.picked_entity = self.mouse_position.and_then(|_| {
@@ -95,7 +99,34 @@ impl World {
     }
   }
 
-  pub fn toggle_wireframe(&mut self) {
-    self.render_system.render_wireframe = !self.render_system.render_wireframe;
+  pub fn handle_events<I>(&mut self, events: I)
+    where I: Iterator<Item=gl::glutin::Event> {
+    use glium::glutin::*;
+    for ev in events {
+      match ev {
+        Event::Closed => return,
+        Event::MouseInput(ElementState::Pressed, _) => {
+          // camera_idx = (camera_idx+1) % camera_positions.len();
+          // let pos = camera_positions[camera_idx];
+          // println!("camera: {:?}", pos);
+          // world.entities.set_position(camera, pos);
+
+          if let Some(e) = self.entities.picked_entity {
+            println!("Entity: {}", e);
+          }
+        },
+        Event::MouseMoved(x,y) => {
+          self.mouse_position = Some((x as u32, y as u32));
+        },
+        Event::Focused(false) => {
+          self.mouse_position = None;
+        },
+        // Toggle wireframe with `w`
+        Event::KeyboardInput(ElementState::Pressed, 25, _) => {
+          self.toggle_wireframe();
+        }
+        _ => (),
+      }
+    }
   }
 }
