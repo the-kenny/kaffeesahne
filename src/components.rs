@@ -280,13 +280,16 @@ impl RenderSystem {
       let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
 
       let ref buffers = resources.meshes[&g.geometry];
+      let texture = buffers.texture.as_ref().and_then(|name| {
+        resources.textures.get(name)
+      }).unwrap_or(&self.empty_texture);
 
       let uniforms = uniform! {
         pickingId:         pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
         modelMatrix:       model_mat.as_uniform(),
         normalMatrix:      normal_mat.as_uniform(),
         Material:          &buffers.material,
-        diffuseTexture:    buffers.texture.as_ref().unwrap_or(&self.empty_texture),
+        diffuseTexture:    texture,
         hasDiffuseTexture: buffers.texture.is_some(),
 
         viewMatrix:        view_mat.as_uniform(),
@@ -298,7 +301,9 @@ impl RenderSystem {
       let ref program = resources.programs[&g.program];
 
 
-      surface.draw((&buffers.positions, &buffers.normals),
+      surface.draw((&buffers.positions,
+                    &buffers.normals,
+                    (gl::vertex::EmptyInstanceAttributes { len: 10 })),
                    &buffers.indices,
                    program,
                    &uniforms,

@@ -16,12 +16,16 @@ pub struct BufferedMesh {
   pub normals:   gl::VertexBuffer<Normal>,
   pub indices:   gl::index::IndexBuffer<u32>,
   pub material:  gl::uniforms::UniformBuffer<Material>,
-  pub texture:   Option<gl::texture::SrgbTexture2d>, // TODO: Use `String`
+  pub texture:   Option<String>,
 }
+
+// TODO: Support `TextureAny`
+type Texture = gl::texture::SrgbTexture2d;
 
 pub struct ResourceManager {
   pub meshes:    HashMap<&'static str, BufferedMesh>,
   pub programs:  HashMap<&'static str, gl::Program>,
+  pub textures:  HashMap<String, Texture>,
 }
 
 impl ResourceManager {
@@ -29,6 +33,7 @@ impl ResourceManager {
     ResourceManager {
       meshes:    HashMap::new(),
       programs:  HashMap::new(),
+      textures:  HashMap::new(),
     }
   }
 
@@ -129,7 +134,7 @@ impl ResourceManager {
     let normals: Vec<_> = normals.into_iter().map(Normal::from).collect();
 
     if mesh.texcoords.len() > 0 {
-      println!("Got {} texture coordinages", mesh.texcoords.len());
+      println!("Got {} texture coordinates", mesh.texcoords.len());
       for f in 0..mesh.texcoords.len()/2 {
         vertices[f].uv = [mesh.texcoords[f*2],
                           mesh.texcoords[f*2 + 1]];
@@ -142,18 +147,18 @@ impl ResourceManager {
 
     let (mut material, texture) = {
       if let Some(material) = materials.into_iter().next() {
-        let texture = {
-          File::open(&material.diffuse_texture).ok()
-            .and_then(|file| image::load(BufReader::new(file), image::PNG).ok())
-            .map(|image| image.to_rgba())
-            .map(|image| {
-              let size = image.dimensions();
-              println!("Loaded {} with size {:?}", material.diffuse_texture, size);
-              let image = gl::texture::RawImage2d::from_raw_rgba_reversed(image.into_raw(), size);
-              gl::texture::SrgbTexture2d::new(display, image).unwrap()
-            })
+        let t = match material.diffuse_texture.as_ref() {
+          "" => None,
+          s  => {
+            if self.textures.get(s).is_none() {
+              self.load_texture(display, &s);
+            }
+            Some(s.to_string())
+          },
         };
-        (Material::from(material), texture)
+        
+        
+        (Material::from(material), t)
       } else {
         (Material {
           ambient:   [1.0; 4],
@@ -174,7 +179,7 @@ impl ResourceManager {
       normals:   normals,
       indices:   indices,
       material:  material,
-      texture:   texture,
+      texture:   texture.map(|s| s.to_string()),
     });
   }
 
@@ -197,7 +202,22 @@ impl ResourceManager {
       material: gl::uniforms::UniformBuffer::empty(display).unwrap(),
       texture: None
     });
+  }
 
+  pub fn load_texture<F>(&mut self, facade: &F, file: &str)
+  where F: gl::backend::Facade {
+    let texture = {
+      File::open(file).ok()
+        .and_then(|file| image::load(BufReader::new(file), image::PNG).ok())
+        .map(|image| image.to_rgba())
+        .map(|image| {
+          let size = image.dimensions();
+          println!("Loaded {} as image with size {:?}", file, size);
+          let image = gl::texture::RawImage2d::from_raw_rgba_reversed(image.into_raw(), size);
+          gl::texture::SrgbTexture2d::new(facade, image).unwrap()
+        }).unwrap()
+    };
+    self.textures.insert(file.to_string(), texture);
   }
 }
 
