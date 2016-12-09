@@ -289,6 +289,15 @@ impl RenderSystem {
     let picking_program = &resources.programs["picking"];
 
     surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
+    // Update the `world` uniforms (once per frame)
+    {
+      let mut x = self.uniform_buffer.map();
+      x.viewMatrix       = world_uniforms.camera_matrix.as_uniform();
+      x.projectionMatrix = world_uniforms.projection_matrix.as_uniform();
+      x.lightPosition    = world_uniforms.light_position.as_uniform();
+      x.cameraPosition   = world_uniforms.camera_position.as_uniform();
+    }
     
     // Iterate over all entities with geometries
     for (entity, g) in manager.geometries.iter() {
@@ -306,8 +315,8 @@ impl RenderSystem {
         m
       };
 
-      let view_mat = world_uniforms.camera_matrix;
-      let normal_mat = model_mat.clone(); // No idea why this doesn't need inverse()
+
+      let normal_mat = model_mat; // No idea why this doesn't need inverse()
 
       let ref program = resources.programs[&g.program];
 
@@ -316,18 +325,13 @@ impl RenderSystem {
           resources.textures.get(name)
         }).unwrap_or(&self.empty_texture);
 
-        self.uniform_buffer.write(&Uniforms {
-          pickingId:         pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
-          _padding1:         Default::default(),
-          modelMatrix:       model_mat.as_uniform(),
-          normalMatrix:      normal_mat.as_uniform(),
-
-          viewMatrix:        view_mat.as_uniform(),
-          projectionMatrix:  world_uniforms.projection_matrix.as_uniform(),
-          lightPosition:     world_uniforms.light_position.as_uniform(),
-          _padding2:         Default::default(),
-          cameraPosition:    world_uniforms.camera_position.as_uniform(),
-        });
+        // Update `model` uniforms, once per draw-call
+        {
+          let mut x = self.uniform_buffer.map();
+          x.pickingId = pickable_id.map(|&Pickable(id)| id).unwrap_or(0);
+          x.modelMatrix = model_mat.as_uniform();
+          x.normalMatrix = normal_mat.as_uniform();
+        }
 
         let uniforms = uniform! {
           Uniforms:          &*self.uniform_buffer,
