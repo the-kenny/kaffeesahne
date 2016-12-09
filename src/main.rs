@@ -19,8 +19,6 @@ fn main() {
     let mut resources = &mut world.resources;
     resources.load_obj(&display, "terrain", "terrain.obj");
     resources.load_obj(&display, "light", "light.obj");
-    resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
-    resources.load_obj(&display, "teapot", "teapot.obj");
     resources.load_obj(&display, "cube", "toruscube.obj");
     resources.make_axis_object(&display, "axis");
 
@@ -33,6 +31,7 @@ fn main() {
                              "picking",
                              "src/shaders/picking.vertex.glsl",
                              "src/shaders/picking.fragment.glsl");
+    // TODO: Move to RenderSystem
     resources.compile_shader(&display,
                              "axis",
                              "src/shaders/axis.vertex.glsl",
@@ -61,7 +60,6 @@ fn main() {
     });
     world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));
   }
-
 
   {
     let cube = world.entities.new_entity();
