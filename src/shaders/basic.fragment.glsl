@@ -4,10 +4,18 @@ in vec3 fragNormal;
 in vec3 fragVert;
 in vec2 fragUv;
 
-uniform vec3 lightPosition;
-uniform vec3 cameraPosition;
-uniform mat3 normalMatrix;
-uniform mat4 modelMatrix;
+layout(std140)
+uniform Uniforms {
+  uint pickingId;
+
+  mat4 modelMatrix;
+  mat4 normalMatrix;
+  mat4 viewMatrix;
+  mat4 projectionMatrix;
+
+  vec3 lightPosition;
+  vec3 cameraPosition;
+};
 
 uniform bool hasDiffuseTexture;
 uniform sampler2D diffuseTexture;
@@ -31,7 +39,7 @@ vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V);
 void main() {
   // All in WorldSpace
   vec4 worldPosition   = modelMatrix * vec4(fragVert, 1.0);
-  vec3 normal          = normalize(normalMatrix*fragNormal);
+  vec3 normal          = normalize(mat3(normalMatrix)*fragNormal);
   vec3 lightDirection  = normalize(lightPosition - worldPosition.xyz);
   vec3 cameraDirection = normalize(cameraPosition - worldPosition.xyz);
 
@@ -41,9 +49,9 @@ void main() {
   color.a = 1.0;                // TODO
 }
 vec3 specularLighting(in vec3 N, in vec3 L, in vec3 V) {
-   vec3 H = normalize(L + V);
-   float factor = max(pow(dot(N, H), shininess), 0.0);
-   return specular.xyz*lightIntensity*factor;
+  vec3 H = normalize(L + V);
+  float factor = max(pow(dot(N, H), shininess), 0.0);
+  return specular.xyz*lightIntensity*factor;
 }
 
 vec3 diffuseLighting(in vec3 N, in vec3 L) {

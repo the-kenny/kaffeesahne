@@ -220,8 +220,36 @@ pub struct WorldUniforms {
   pub camera_position:   na::Point3<f32>,
 }
 
+#[derive(Debug, Clone, Copy)]
+#[allow(non_snake_case)]
+struct Uniforms {
+  pickingId:         u32,
+  _padding1:         [u32; 3],
+  modelMatrix:       [[f32; 4]; 4],
+  normalMatrix:      [[f32; 4]; 4],
+  // Material:          &'a Material,
+  // diffuseTexture:    &'a gl::texture::SrgbTexture2d,
+  // hasDiffuseTexture: bool,
+
+  viewMatrix:        [[f32; 4]; 4],
+  projectionMatrix:  [[f32; 4]; 4],
+  lightPosition:     [f32; 3],
+  _padding2:         u32,
+  cameraPosition:    [f32; 3],
+}
+
+implement_uniform_block!(Uniforms,
+                         pickingId,
+                         modelMatrix,
+                         normalMatrix,
+                         viewMatrix,
+                         projectionMatrix,
+                         lightPosition,
+                         cameraPosition);
+
 pub struct RenderSystem {
   empty_texture: gl::texture::SrgbTexture2d,
+  uniform_buffer: gl::uniforms::UniformBuffer<Uniforms>,
   pub render_wireframe: bool,
 }
 
@@ -229,14 +257,15 @@ impl RenderSystem {
   pub fn new<F: Facade>(f: &F) -> Self {
     RenderSystem {
       empty_texture: gl::texture::SrgbTexture2d::empty(f, 0, 0).unwrap(),
+      uniform_buffer: gl::uniforms::UniformBuffer::empty_dynamic(f).unwrap(),
       render_wireframe: false,
     }
   }
 
-  pub fn render<S, PS>(&self,
+  pub fn render<S, PS>(&mut self,
                        manager: &EntityManager,
                        surface: &mut S,
-                       picking_surface: Option<&mut PS>,
+                       picking_surface: &mut PS,
                        // TODO: Pass via `World`
                        resources: &ResourceManager,
                        world_uniforms: &WorldUniforms)
@@ -254,12 +283,13 @@ impl RenderSystem {
     if self.render_wireframe {
       params.polygon_mode = gl::PolygonMode::Line;
     }
-
+    
     // Clear Buffers
+    picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+    let picking_program = &resources.programs["picking"];
+
     surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-
-    let mut pick_items = Vec::with_capacity(manager.pickables.len());
-
+    
     // Iterate over all entities with geometries
     for (entity, g) in manager.geometries.iter() {
       let p = manager.positions[entity];
@@ -277,59 +307,53 @@ impl RenderSystem {
       };
 
       let view_mat = world_uniforms.camera_matrix;
-      let normal_mat = na::inverse(&matrix3_from_matrix4(&(model_mat))).unwrap();
-
-      let ref buffers = resources.meshes[&g.geometry];
-      let texture = buffers.texture.as_ref().and_then(|name| {
-        resources.textures.get(name)
-      }).unwrap_or(&self.empty_texture);
-
-      let uniforms = uniform! {
-        pickingId:         pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
-        modelMatrix:       model_mat.as_uniform(),
-        normalMatrix:      normal_mat.as_uniform(),
-        Material:          &buffers.material,
-        diffuseTexture:    texture,
-        hasDiffuseTexture: buffers.texture.is_some(),
-
-        viewMatrix:        view_mat.as_uniform(),
-        projectionMatrix:  world_uniforms.projection_matrix.as_uniform(),
-        lightPosition:     world_uniforms.light_position.as_uniform(),
-        cameraPosition:    world_uniforms.camera_position.as_uniform(),
-      };
+      let normal_mat = model_mat.clone(); // No idea why this doesn't need inverse()
 
       let ref program = resources.programs[&g.program];
 
+      for (_name, mesh) in resources.meshes[&g.geometry].meshes.iter() {
+        let texture = mesh.texture.as_ref().and_then(|name| {
+          resources.textures.get(name)
+        }).unwrap_or(&self.empty_texture);
 
-      surface.draw((&buffers.positions,
-                    &buffers.normals,
-                    (gl::vertex::EmptyInstanceAttributes { len: 10 })),
-                   &buffers.indices,
-                   program,
-                   &uniforms,
-                   &params)
-        .unwrap();
+        self.uniform_buffer.write(&Uniforms {
+          pickingId:         pickable_id.map(|&Pickable(id)| id).unwrap_or(0),
+          _padding1:         Default::default(),
+          modelMatrix:       model_mat.as_uniform(),
+          normalMatrix:      normal_mat.as_uniform(),
 
-      if pickable_id.is_some() && picking_surface.is_some() {
-        pick_items.push((&buffers.positions,
-                         &buffers.indices,
-                         uniforms));
-      }
-    }
+          viewMatrix:        view_mat.as_uniform(),
+          projectionMatrix:  world_uniforms.projection_matrix.as_uniform(),
+          lightPosition:     world_uniforms.light_position.as_uniform(),
+          _padding2:         Default::default(),
+          cameraPosition:    world_uniforms.camera_position.as_uniform(),
+        });
 
-    if let Some(picking_surface) = picking_surface {
-      let picking_program = &resources.programs["picking"];
+        let uniforms = uniform! {
+          Uniforms:          &*self.uniform_buffer,
+          Material:          &mesh.material,
+          diffuseTexture:    texture,
+          hasDiffuseTexture: mesh.texture.is_some(),
+        };
 
-      picking_surface.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-      for (positions, indices, uniforms) in pick_items.into_iter() {
-        picking_surface.draw(positions,
-                             indices,
-                             &picking_program,
-                             &uniforms,
-                             &params)
+        surface.draw((&mesh.positions, &mesh.normals),
+                     &mesh.indices,
+                     program,
+                     &uniforms,
+                     &params)
           .unwrap();
+        
+        if pickable_id.is_some() {
+          picking_surface.draw(&mesh.positions,
+                               &mesh.indices,
+                               &picking_program,
+                               &uniforms,
+                               &params)
+            .unwrap();
+        }
       }
     }
+
 
     // Render axis system
     {
@@ -338,7 +362,7 @@ impl RenderSystem {
         viewMatrix:       world_uniforms.camera_matrix.as_uniform(),
       };
 
-      let ref buffers = resources.meshes["axis"];
+      let ref buffers = resources.meshes["axis"].meshes["axis"];
       let ref program = resources.programs["axis"];
       surface.draw(&buffers.positions,
                    &buffers.indices,

@@ -10,7 +10,7 @@ fn main() {
   use glium::DisplayBuild;
   let display = gl::glutin::WindowBuilder::new()
     .with_depth_buffer(24)
-    .with_multisampling(8)
+    // .with_multisampling(8)
     .build_glium().unwrap();
 
   let mut world = World::new(&display);
@@ -21,7 +21,7 @@ fn main() {
     resources.load_obj(&display, "light", "light.obj");
     resources.load_obj(&display, "hollow_cube", "hollow_cube.obj");
     resources.load_obj(&display, "teapot", "teapot.obj");
-    resources.load_obj(&display, "cube", "cube.obj");
+    resources.load_obj(&display, "cube", "toruscube.obj");
     resources.make_axis_object(&display, "axis");
 
     resources.compile_shader(&display,

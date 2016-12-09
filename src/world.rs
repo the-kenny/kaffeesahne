@@ -87,7 +87,7 @@ impl World {
 
     self.render_system.render(&self.entities,
                               surface,
-                              Some(&mut picking_surface),
+                              &mut picking_surface,
                               &self.resources,
                               &world_uniforms);
 

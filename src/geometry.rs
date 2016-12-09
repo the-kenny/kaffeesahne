@@ -64,6 +64,17 @@ pub struct Material {
   pub shininess: f32,
 }
 
+impl Default for Material {
+  fn default() -> Self {
+    Material {
+      ambient: [0.0; 4],
+      diffuse: [0.0; 4],
+      specular: [0.0; 4],
+      shininess: 0.0,
+    }
+  }
+}
+
 implement_uniform_block!(Material,
                          ambient,
                          diffuse,
