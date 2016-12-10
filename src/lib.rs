@@ -17,6 +17,9 @@ pub use resources::*;
 mod components;
 pub use components::*;
 
+mod render_system;
+pub use render_system::*;
+
 mod world;
 pub use world::*;
 

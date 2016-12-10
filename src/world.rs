@@ -2,6 +2,7 @@ use nalgebra as na;
 use glium as gl;
 
 use super::components::*;
+use super::render_system::*;
 use super::{Millis, ResourceManager};
 
 pub struct World {
