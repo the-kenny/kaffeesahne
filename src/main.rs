@@ -61,8 +61,8 @@ fn main() {
     world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));
   }
 
+  let cube = world.entities.new_entity();
   {
-    let cube = world.entities.new_entity();
     world.entities.set_position(cube, Vector3::new(0.0, 0.75, 0.0));
     world.entities.add_geometry(cube, Geometry {
       geometry: "cube",
@@ -71,6 +71,7 @@ fn main() {
     world.entities.set_pickable(cube, true);
 
     world.entities.entities[cube].insert(FLAG_VELOCITY);
+    world.entities.entities[cube].insert(FLAG_ROTATION);
     world.entities.velocities[cube] = Velocity {
       linear: na::zero(),
       angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
@@ -83,7 +84,7 @@ fn main() {
   let camera = world.entities.new_entity();
   world.entities.add_camera(camera, Camera {
     target: Point3::new(0.0, 0.0, 0.0),
-    tracking: None,
+    tracking: Some(cube),
   });
   world.entities.set_position(camera, Position(Vector3::new(0.5, 2.0, -3.0)));
 

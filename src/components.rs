@@ -152,7 +152,7 @@ pub struct Rotation(pub na::UnitQuaternion<f32>);
 
 impl Default for Rotation {
   fn default() -> Self {
-    Rotation(na::Unit::new(&na::zero()))
+    Rotation(na::Unit::new(&na::one()))
   }
 }
 
@@ -222,7 +222,7 @@ pub struct EntityManager {
   highest_id:     EntityId,
 
   pub entities: FlagsArray,
-  
+
   pub positions:  ComponentArray<Position>,
   pub scales:     ComponentArray<Scale>,
   pub rotations:  ComponentArray<Rotation>,
@@ -243,7 +243,7 @@ impl EntityManager {
       flags: flag,
     }
   }
-  
+
   pub fn new_entity(&mut self) -> EntityId {
     // TODO: Return first entity which has FLAG_NONE set when we run out of IDs
     self.highest_id += 1;
@@ -383,13 +383,15 @@ impl VelocitySystem {
       manager.positions[entity].0 += velocity.linear * delta;
 
       // Update component.rotation
-      let angle = velocity.angular.0.angle()*delta;
-      let axis  = velocity.angular.0.axis().unwrap();
-
-      // If rotation is enabled for this entity, apply angular
-      // velocity to rotation
       if manager.entities[entity].contains(FLAG_ROTATION) {
+        let angle = velocity.angular.0.angle()*delta;
+        let axis  = velocity.angular.0.axis().unwrap();
+
         manager.rotations[entity].0 *= UnitQuaternion::from_axisangle(axis, angle)
+      } else if velocity.angular.0.angle() != 0.0 {
+        // If rotation isn't enabled log a warning
+        // TODO: Rate-limit
+        println!("Entity {}: Got angular rotation but FLAG_ROTATION isn't set", entity);
       }
     }
   }
@@ -400,7 +402,7 @@ impl CameraSystem {
   pub fn run(manager: &mut EntityManager, _delta: Millis) {
     for entity in EntityManager::entity_iter(&manager.entities, FLAG_CAMERA) {
       let ref mut camera = manager.cameras[entity];
-      
+
       if let Some(target) = camera.tracking {
         camera.target = manager.positions[target].0.to_point();
       }
@@ -436,7 +438,7 @@ impl BobSystem {
   pub fn run(manager: &mut EntityManager, delta: Millis) {
     for entity in EntityManager::entity_iter(&manager.entities, FLAG_BOB) {
       let ref mut bob = manager.bobs[entity];
-      
+
       // Update new Bob state
       bob.state += delta;
       if bob.state.as_millis() >= bob.period.as_millis() {
