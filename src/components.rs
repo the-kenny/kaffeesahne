@@ -5,7 +5,7 @@ use super::*;
 
 pub type EntityId = u32;
 
-const MAX_ENTITIES: usize = 128;
+const MAX_ENTITIES: usize = 4096;
 
 bitflags! {
   // TODO: Add a macro for all of these
@@ -69,6 +69,7 @@ impl<'a, T: Default> Index<RangeFull> for EntityArray<T> {
 
 
 pub struct EntityIterator<'a> {
+  // TODO: use a range for `idx`
   idx: EntityId,
   entities: &'a [ComponentFlags],
   flags: ComponentFlags,
@@ -244,8 +245,9 @@ impl EntityManager {
   }
   
   pub fn new_entity(&mut self) -> EntityId {
+    // TODO: Return first entity which has FLAG_NONE set when we run out of IDs
     self.highest_id += 1;
-    // self.entities.insert(self.highest_id);
+    assert!(self.highest_id < (self.entities.0.len() as EntityId));
     self.entities[self.highest_id] = FLAG_NONE;
     self.highest_id
   }
