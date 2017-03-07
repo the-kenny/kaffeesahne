@@ -32,17 +32,18 @@ impl World {
   }
 
   fn current_camera(&self) -> Option<EntityId> {
-    self.entities.cameras.iter().next().map(|(id, _)| *id)
+    EntityManager::entity_iter(&self.entities.entities, FLAG_CAMERA)
+      .next()
   }
 
   fn uniforms(&self, (width,height): (u32, u32)) -> WorldUniforms {
     let camera = self.current_camera()
       .expect("Scene doesn't contain a camera!");
 
-    let camera_position = self.entities.positions[&camera].0.as_point();
+    let camera_position = self.entities.positions[camera].0.as_point();
     let camera_mat: na::Matrix4<f32> = na::to_homogeneous(
       &na::Isometry3::look_at_rh(&camera_position,
-                                 &self.entities.cameras[&camera].target,
+                                 &self.entities.cameras[camera].target,
                                  &na::Vector3::new(0.0, 1.0, 0.0)));
 
     // Something is wrong here - perspective doesn't look right

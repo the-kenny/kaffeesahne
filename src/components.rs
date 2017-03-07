@@ -1,11 +1,96 @@
-use std::collections::{BTreeMap, BTreeSet};
 use glium as gl;
 use std::f32::consts;
 
 use super::*;
 
 pub type EntityId = u32;
-type EntityMap<K,V> = BTreeMap<K,V>;
+
+const MAX_ENTITIES: usize = 128;
+
+bitflags! {
+  // TODO: Add a macro for all of these
+  flags ComponentFlags: u64 {
+    const FLAG_NONE     = 1 << 1,
+    const FLAG_POSITION = 1 << 3,
+    const FLAG_SCALE    = 1 << 4,
+    const FLAG_ROTATION = 1 << 5,
+    const FLAG_VELOCITY = 1 << 6,
+    const FLAG_GEOMETRY = 1 << 7,
+    const FLAG_PICKABLE = 1 << 8,
+    const FLAG_CAMERA   = 1 << 9,
+    const FLAG_BOB      = 1 << 10,
+  }
+}
+
+impl Default for ComponentFlags {
+  fn default() -> Self { FLAG_NONE }
+}
+
+pub struct EntityArray<T: Default>([T; MAX_ENTITIES]);
+
+impl<T: Default> Default for EntityArray<T> {
+  fn default() -> Self {
+    let mut arr: [T; MAX_ENTITIES];
+    unsafe {
+      use std::{ptr, mem};
+      arr = mem::uninitialized();
+      for elem in &mut arr[..] {
+        ptr::write(elem, Default::default())
+      }
+    }
+    EntityArray(arr)
+  }
+}
+
+pub type ComponentArray<T> = EntityArray<T>;
+pub type FlagsArray = EntityArray<ComponentFlags>;
+
+use std::ops::{Index, IndexMut, RangeFull};
+
+impl<T: Default> Index<EntityId> for EntityArray<T> {
+  type Output = T;
+  fn index(&self, entity: EntityId) -> &Self::Output {
+    self.0.index(entity as usize)
+  }
+}
+
+impl<T: Default> IndexMut<EntityId> for EntityArray<T> {
+    fn index_mut<'a>(&'a mut self, entity: EntityId) -> &'a mut T {
+      self.0.index_mut(entity as usize)
+    }
+}
+
+impl<'a, T: Default> Index<RangeFull> for EntityArray<T> {
+  type Output = [T];
+  fn index(&self, _idx: RangeFull) -> &Self::Output {
+    self.0.index(..)
+  }
+}
+
+
+pub struct EntityIterator<'a> {
+  idx: EntityId,
+  entities: &'a [ComponentFlags],
+  flags: ComponentFlags,
+}
+
+impl<'a> Iterator for EntityIterator<'a> {
+  type Item = EntityId;
+  fn next(&mut self) -> Option<Self::Item> {
+    // TODO: Rewrite via iterators
+    while (self.idx as usize) < self.entities.len() {
+      if self.entities[self.idx as usize].contains(self.flags) {
+        let idx = self.idx;
+        self.idx += 1;
+        return Some(idx)
+      } else {
+        self.idx += 1;
+        continue;
+      }
+    }
+    None
+  }
+}
 
 pub trait AsMatrix {
   fn as_matrix(&self) -> Matrix4<f32>;
@@ -15,6 +100,12 @@ pub trait AsMatrix {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Position(pub Vector3<f32>);
+
+impl Default for Position {
+  fn default() -> Self {
+    Position(na::zero())
+  }
+}
 
 impl AsMatrix for Position {
   fn as_matrix(&self) -> Matrix4<f32> {
@@ -34,6 +125,12 @@ impl From<na::Vector3<f32>> for Position {
 #[derive(Debug, Copy, Clone)]
 pub struct Scale(pub Vector3<f32>);
 
+impl Default for Scale {
+  fn default() -> Self {
+    Scale(na::one())
+  }
+}
+
 impl AsMatrix for Scale {
   fn as_matrix(&self) -> Matrix4<f32> {
     Matrix4::new(self.0.x, 0.0,      0.0,      0.0,
@@ -52,6 +149,12 @@ impl From<na::Vector3<f32>> for Scale {
 #[derive(Debug, Copy, Clone)]
 pub struct Rotation(pub na::UnitQuaternion<f32>);
 
+impl Default for Rotation {
+  fn default() -> Self {
+    Rotation(na::Unit::new(&na::zero()))
+  }
+}
+
 impl AsMatrix for Rotation {
   fn as_matrix(&self) -> Matrix4<f32> {
     na::to_homogeneous(self.0.to_rotation_matrix().submatrix())
@@ -64,6 +167,15 @@ pub struct Velocity {
   pub linear:  Vector3<f32>
 }
 
+impl Default for Velocity {
+  fn default() -> Self {
+    Velocity {
+      angular: Rotation::default(),
+      linear: na::zero(),
+    }
+  }
+}
+
 // More Complex Object Attributes
 
 #[derive(Debug, Copy, Clone)]
@@ -72,8 +184,22 @@ pub struct Geometry {
   pub program:  &'static str,
 }
 
+
+impl Default for Geometry {
+  fn default() -> Self {
+    Geometry {
+      geometry: "UNINITIALIZED",
+      program: "UNINITIALIZED",
+    }
+  }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Pickable(pub EntityId);
+
+impl Default for Pickable {
+  fn default() -> Self { Pickable(0) }
+}
 
 #[derive(Debug)]
 pub struct Camera {
@@ -81,27 +207,46 @@ pub struct Camera {
   pub tracking: Option<EntityId>,
 }
 
+impl Default for Camera {
+  fn default() -> Self {
+    Camera {
+      target: na::Point3::new(0.0, 0.0, 0.0),
+      tracking: None
+    }
+  }
+}
+
 #[derive(Default)]
 pub struct EntityManager {
-  pub entities:   BTreeSet<EntityId>,
   highest_id:     EntityId,
 
-  pub positions:  EntityMap<EntityId, Position>,
-  pub scales:     EntityMap<EntityId, Scale>,
-  pub rotations:  EntityMap<EntityId, Rotation>,
-  pub velocities: EntityMap<EntityId, Velocity>,
-  pub geometries: EntityMap<EntityId, Geometry>,
-  pub pickables:  EntityMap<EntityId, Pickable>,
-  pub cameras:    EntityMap<EntityId, Camera>,
-  pub bobs:       EntityMap<EntityId, Bob>,
+  pub entities: FlagsArray,
+  
+  pub positions:  ComponentArray<Position>,
+  pub scales:     ComponentArray<Scale>,
+  pub rotations:  ComponentArray<Rotation>,
+  pub velocities: ComponentArray<Velocity>,
+  pub geometries: ComponentArray<Geometry>,
+  pub pickables:  ComponentArray<Pickable>,
+  pub cameras:    ComponentArray<Camera>,
+  pub bobs:       ComponentArray<Bob>,
 
   pub picked_entity: Option<EntityId>,
 }
 
 impl EntityManager {
+  pub fn entity_iter<'a>(flags: &'a FlagsArray, flag: ComponentFlags) -> EntityIterator<'a> {
+    EntityIterator {
+      idx: 0,
+      entities: &flags[..],
+      flags: flag,
+    }
+  }
+  
   pub fn new_entity(&mut self) -> EntityId {
     self.highest_id += 1;
-    self.entities.insert(self.highest_id);
+    // self.entities.insert(self.highest_id);
+    self.entities[self.highest_id] = FLAG_NONE;
     self.highest_id
   }
 
@@ -110,30 +255,36 @@ impl EntityManager {
   }
 
   pub fn add_geometry(&mut self, entity: EntityId, g: Geometry) {
-    self.geometries.insert(entity, g);
+    self.geometries[entity] = g;
+    self.entities[entity].insert(FLAG_GEOMETRY);
   }
 
   pub fn set_position<P: Into<Position>>(&mut self, entity: EntityId, p: P) {
-    self.positions.insert(entity, p.into());
+    self.positions[entity] = p.into();
+    self.entities[entity].insert(FLAG_POSITION);
   }
 
   pub fn add_camera(&mut self, entity: EntityId, camera: Camera) {
-    self.cameras.insert(entity, camera);
+    self.cameras[entity] = camera;
+    self.entities[entity].insert(FLAG_CAMERA);
   }
 
   pub fn set_scale<S: Into<Scale>>(&mut self, entity: EntityId, scale: S) {
-    self.scales.insert(entity, scale.into());
+    self.scales[entity] = scale.into();
+    self.entities[entity].insert(FLAG_SCALE);
   }
 
   pub fn set_rotation(&mut self, entity: EntityId, rot: Rotation) {
-    self.rotations.insert(entity, rot);
+    self.rotations[entity] = rot;
+    self.entities[entity].insert(FLAG_ROTATION);
   }
 
   pub fn set_pickable(&mut self, entity: EntityId, enable: bool) {
     if enable {
-      self.pickables.insert(entity, Pickable(entity));
+      self.pickables[entity] = Pickable(entity);
+      self.entities[entity].insert(FLAG_PICKABLE);
     } else {
-      self.pickables.remove(&entity);
+      self.entities[entity].remove(FLAG_PICKABLE);
     }
   }
 }
@@ -223,24 +374,21 @@ pub struct WorldUniforms {
 pub struct VelocitySystem;
 impl VelocitySystem {
   pub fn run(manager: &mut EntityManager, delta: Millis) {
-    for (entity, velocity) in manager.velocities.iter() {
+    for entity in EntityManager::entity_iter(&manager.entities, FLAG_VELOCITY) {
+      let velocity = manager.velocities[entity];
       let delta = delta.as_seconds();
       // Update component.position
-      manager.positions.get_mut(&entity).unwrap().0 += velocity.linear * delta;
+      manager.positions[entity].0 += velocity.linear * delta;
 
       // Update component.rotation
       let angle = velocity.angular.0.angle()*delta;
       let axis  = velocity.angular.0.axis().unwrap();
 
-      use std::collections::btree_map::Entry::*;
-      match manager.rotations.entry(*entity) {
-        Vacant(entry) => {
-          entry.insert(Rotation(quat_rotate(angle, axis)));
-        },
-        Occupied(entry) => {
-          entry.into_mut().0 *= UnitQuaternion::from_axisangle(axis, angle);
-        },
-      };
+      // If rotation is enabled for this entity, apply angular
+      // velocity to rotation
+      if manager.entities[entity].contains(FLAG_ROTATION) {
+        manager.rotations[entity].0 *= UnitQuaternion::from_axisangle(axis, angle)
+      }
     }
   }
 }
@@ -248,9 +396,11 @@ impl VelocitySystem {
 pub struct CameraSystem;
 impl CameraSystem {
   pub fn run(manager: &mut EntityManager, _delta: Millis) {
-    for (_, camera) in manager.cameras.iter_mut() {
+    for entity in EntityManager::entity_iter(&manager.entities, FLAG_CAMERA) {
+      let ref mut camera = manager.cameras[entity];
+      
       if let Some(target) = camera.tracking {
-        camera.target = manager.positions[&target].0.to_point();
+        camera.target = manager.positions[target].0.to_point();
       }
     }
   }
@@ -261,6 +411,12 @@ pub struct Bob {
   pub period: Millis,
   pub direction: Vector3<f32>,
   pub state: Millis,
+}
+
+impl Default for Bob {
+  fn default() -> Self {
+    Bob::new(Millis(0.0), na::zero())
+  }
 }
 
 impl Bob {
@@ -276,7 +432,9 @@ impl Bob {
 pub struct BobSystem;
 impl BobSystem {
   pub fn run(manager: &mut EntityManager, delta: Millis) {
-    for (entity, mut bob) in manager.bobs.iter_mut() {
+    for entity in EntityManager::entity_iter(&manager.entities, FLAG_BOB) {
+      let ref mut bob = manager.bobs[entity];
+      
       // Update new Bob state
       bob.state += delta;
       if bob.state.as_millis() >= bob.period.as_millis() {
@@ -287,7 +445,7 @@ impl BobSystem {
       // Calculate position-delta (direction*sine scaled by delta-t)
       let td = delta.as_millis() / bob.period.as_millis();
       let pd = sine * td * bob.direction;
-      manager.positions.get_mut(&entity).unwrap().0 += pd;
+      manager.positions[entity].0 += pd;
     }
   }
 }

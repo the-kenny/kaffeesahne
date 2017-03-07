@@ -83,18 +83,26 @@ impl RenderSystem {
     }
     
     // Iterate over all entities with geometries
-    for (entity, g) in manager.geometries.iter() {
+    for entity in EntityManager::entity_iter(&manager.entities, FLAG_GEOMETRY) {
+      let g = manager.geometries[entity];
+      let flags = manager.entities[entity];
+      
       let p = manager.positions[entity];
-      let pickable_id = manager.pickables.get(entity);
+      let pickable_id = if flags.contains(FLAG_PICKABLE) {
+        Some(manager.pickables[entity])
+      } else {
+        None
+      };
+      
 
       let model_mat = {
         let mut m = p.as_matrix();
-        manager.rotations.get(entity).map(|rot| {
-          m *= rot.as_matrix();
-        });
-        manager.scales.get(entity).map(|sca| {
-          m *= sca.as_matrix();
-        });
+        if flags.contains(FLAG_ROTATION) {
+          m *= manager.rotations[entity].as_matrix();
+        }
+        if flags.contains(FLAG_SCALE) {
+          m *= manager.scales[entity].as_matrix();
+        }
         m
       };
 
@@ -111,7 +119,11 @@ impl RenderSystem {
         // Update `model` uniforms, once per draw-call
         {
           let mut x = self.uniform_buffer.map();
-          x.pickingId = pickable_id.map(|&Pickable(id)| id).unwrap_or(0);
+          x.pickingId = if flags.contains(FLAG_PICKABLE) {
+            manager.pickables[entity].0
+          } else {
+            0
+          };
           x.modelMatrix = model_mat.as_uniform();
           x.normalMatrix = normal_mat.as_uniform();
         }

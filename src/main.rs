@@ -69,11 +69,15 @@ fn main() {
       program:  "basic",
     });
     world.entities.set_pickable(cube, true);
-    world.entities.velocities.insert(cube, Velocity {
+
+    world.entities.entities[cube].insert(FLAG_VELOCITY);
+    world.entities.velocities[cube] = Velocity {
       linear: na::zero(),
       angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
-    });
-    world.entities.bobs.insert(cube, Bob::new(Millis(1000.0), Vector3::new(0.0, 0.5, 0.0)));
+    };
+
+    world.entities.entities[cube].insert(FLAG_BOB);
+    world.entities.bobs[cube] = Bob::new(Millis(1000.0), Vector3::new(0.0, 0.5, 0.0));
   }
 
   let camera = world.entities.new_entity();
