@@ -10,7 +10,7 @@ pub struct World {
   pub entities: EntityManager,
 
   // TODO: Make an Entity
-  pub light:          na::Point3<f32>,
+  pub light:          na::Vector3<f32>,
   pub mouse_position: Option<(u32, u32)>,
 
   render_system:   RenderSystem,
@@ -26,7 +26,7 @@ impl World {
       render_system: RenderSystem::new(display),
       picking_system: PickingSystem::new(display, (800,600)),
 
-      light: na::Point3::new(0.0, 0.0, 0.0),
+      light: na::Vector3::new(0.0, 0.0, 0.0),
       mouse_position: None,
     }
   }
@@ -40,25 +40,26 @@ impl World {
     let camera = self.current_camera()
       .expect("Scene doesn't contain a camera!");
 
-    let camera_position = self.entities.positions[camera].0.as_point();
-    let camera_mat: na::Matrix4<f32> = na::to_homogeneous(
-      &na::Isometry3::look_at_rh(&camera_position,
-                                 &self.entities.cameras[camera].target,
-                                 &na::Vector3::new(0.0, 1.0, 0.0)));
+    let camera_position = self.entities.positions[camera].0;
+    let camera_mat: na::Matrix4<f32> = 
+      na::Isometry3::look_at_rh(&na::Point3::from_coordinates(camera_position),
+                                &na::Point3::from_coordinates(self.entities.cameras[camera].target),
+                                &na::Vector3::new(0.0, 1.0, 0.0))
+      .to_homogeneous();
 
     // Something is wrong here - perspective doesn't look right
     let projection_mat = {
       let ratio    = width as f32 / height as f32;
       let fov: f32 = 3.141592 / (360.0 / 75.0);
       let (znear, zfar) = (0.1, 1024.0);
-      na::PerspectiveMatrix3::new(ratio, fov, znear, zfar).to_matrix()
+      na::Perspective3::new(ratio, fov, znear, zfar).unwrap()
     };
 
     WorldUniforms {
       projection_matrix: projection_mat,
       light_position:    self.light,
       camera_matrix:     camera_mat,
-      camera_position:   *camera_position,
+      camera_position:   camera_position,
     }
   }
 

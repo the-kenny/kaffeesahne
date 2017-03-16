@@ -48,17 +48,17 @@ fn main() {
     world.entities.set_pickable(terrain, true);
   }
 
-  world.light = na::Point3::new(1.0, 1.0, 0.0);
+  world.light = na::Vector3::new(1.0, 1.0, 0.0);
   {
     let light = world.entities.new_entity();
-    let position = Position(world.light.to_vector());
+    let position = Position(world.light);
     world.entities.set_position(light, position);
     world.entities.set_pickable(light, true);
     world.entities.add_geometry(light, Geometry {
       geometry: "light",
       program:  "basic",
     });
-    world.entities.set_scale(light, Scale(na::one::<na::Vector3<f32>>()*0.05));
+    world.entities.set_scale(light, Scale(na::Vector3::new(0.05, 0.05, 0.05)));
   }
 
   let cube = world.entities.new_entity();
@@ -74,7 +74,7 @@ fn main() {
     world.entities.entities[cube].insert(FLAG_ROTATION);
     world.entities.velocities[cube] = Velocity {
       linear: na::zero(),
-      angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new(&Vector3::new(0.0, 1.0, 0.0)))),
+      angular: Rotation(quat_rotate(2.0*consts::PI/8.0, na::Unit::new_normalize(Vector3::new(0.0, 1.0, 0.0)))),
     };
 
     world.entities.entities[cube].insert(FLAG_BOB);
@@ -83,7 +83,7 @@ fn main() {
 
   let camera = world.entities.new_entity();
   world.entities.add_camera(camera, Camera {
-    target: Point3::new(0.0, 0.0, 0.0),
+    target: Vector3::new(0.0, 0.0, 0.0),
     tracking: Some(cube),
   });
   world.entities.set_position(camera, Position(Vector3::new(0.5, 2.0, -3.0)));

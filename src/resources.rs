@@ -115,7 +115,7 @@ impl ResourceManager {
         let v1 = vertices[idx1];
         let v2 = vertices[idx2];
         let v3 = vertices[idx3];
-        let normal  = na::normalize(&na::cross(&(v2-v1), &(v3-v1)));
+        let normal  = na::normalize(&(v2-v1).cross(&(v3-v1)));
 
         normals[idx1] = normal;
         normals[idx2] = normal;

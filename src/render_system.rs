@@ -76,6 +76,10 @@ impl RenderSystem {
     // Update the `world` uniforms (once per frame)
     {
       let mut x = self.uniform_buffer.map();
+      // x.viewMatrix       = world_uniforms.camera_matrix.as_uniform();
+      // x.projectionMatrix = world_uniforms.projection_matrix.as_uniform();
+      // x.lightPosition    = world_uniforms.light_position.as_uniform();
+      // x.cameraPosition   = world_uniforms.camera_position.as_uniform();
       x.viewMatrix       = world_uniforms.camera_matrix.as_uniform();
       x.projectionMatrix = world_uniforms.projection_matrix.as_uniform();
       x.lightPosition    = world_uniforms.light_position.as_uniform();

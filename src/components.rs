@@ -9,7 +9,7 @@ const MAX_ENTITIES: usize = 4096;
 
 bitflags! {
   // TODO: Add a macro for all of these
-  flags ComponentFlags: u64 {
+  pub flags ComponentFlags: u64 {
     const FLAG_NONE     = 1 << 1,
     const FLAG_POSITION = 1 << 3,
     const FLAG_SCALE    = 1 << 4,
@@ -128,7 +128,7 @@ pub struct Scale(pub Vector3<f32>);
 
 impl Default for Scale {
   fn default() -> Self {
-    Scale(na::one())
+    Scale(Vector3::new(1.0, 1.0, 1.0))
   }
 }
 
@@ -152,13 +152,15 @@ pub struct Rotation(pub na::UnitQuaternion<f32>);
 
 impl Default for Rotation {
   fn default() -> Self {
-    Rotation(na::Unit::new(&na::one()))
+    Rotation(na::UnitQuaternion::identity())
   }
 }
 
 impl AsMatrix for Rotation {
   fn as_matrix(&self) -> Matrix4<f32> {
-    na::to_homogeneous(self.0.to_rotation_matrix().submatrix())
+    self.0.to_rotation_matrix()
+      //.submatrix()
+      .to_homogeneous()
   }
 }
 
@@ -204,14 +206,14 @@ impl Default for Pickable {
 
 #[derive(Debug)]
 pub struct Camera {
-  pub target: Point3<f32>,
+  pub target: Vector3<f32>,
   pub tracking: Option<EntityId>,
 }
 
 impl Default for Camera {
   fn default() -> Self {
     Camera {
-      target: na::Point3::new(0.0, 0.0, 0.0),
+      target: na::Vector3::new(0.0, 0.0, 0.0),
       tracking: None
     }
   }
@@ -367,9 +369,9 @@ impl PickingSystem {
 
 pub struct WorldUniforms {
   pub projection_matrix: na::Matrix4<f32>,
-  pub light_position:    na::Point3<f32>,
+  pub light_position:    na::Vector3<f32>,
   pub camera_matrix:     na::Matrix4<f32>,
-  pub camera_position:   na::Point3<f32>,
+  pub camera_position:   na::Vector3<f32>,
 }
 
 #[derive(Default)]
@@ -387,7 +389,7 @@ impl VelocitySystem {
         let angle = velocity.angular.0.angle()*delta;
         let axis  = velocity.angular.0.axis().unwrap();
 
-        manager.rotations[entity].0 *= UnitQuaternion::from_axisangle(axis, angle)
+        manager.rotations[entity].0 *= UnitQuaternion::from_axis_angle(&axis, angle)
       } else if velocity.angular.0.angle() != 0.0 {
         // If rotation isn't enabled log a warning
         // TODO: Rate-limit
@@ -404,7 +406,7 @@ impl CameraSystem {
       let ref mut camera = manager.cameras[entity];
 
       if let Some(target) = camera.tracking {
-        camera.target = manager.positions[target].0.to_point();
+        camera.target = manager.positions[target].0;
       }
     }
   }
